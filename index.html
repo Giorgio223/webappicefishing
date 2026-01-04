@@ -7,14 +7,14 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root{
-      --bg1:#eef7ff; --bg2:#cfe6ff;
+      --bg1:#eef4fb; --bg2:#cfddeb; /* более серо-голубой фон */
 
-      --leaf1:#2f86ff;   /* яркий синий */
-      --leaf2:#8fe6ff;   /* яркий голубой */
+      --leaf1:#1677ff;   /* яркий синий */
+      --leaf2:#7fe3ff;   /* яркий голубой */
 
       --red:#e11d48;
       --orange:#fb923c;
-      --blue:#2563eb;
+      --blue:#0b2a8f;    /* LIL BLUES темнее */
 
       --ring1:#0b1220;
     }
@@ -23,8 +23,8 @@
       margin:0;
       min-height:100vh;
       background:
-        radial-gradient(900px 600px at 25% 15%, rgba(255,255,255,.95), rgba(255,255,255,0) 60%),
-        radial-gradient(1200px 900px at 70% 35%, rgba(255,255,255,.65), rgba(255,255,255,0) 65%),
+        radial-gradient(900px 600px at 25% 15%, rgba(255,255,255,.92), rgba(255,255,255,0) 60%),
+        radial-gradient(1200px 900px at 70% 35%, rgba(255,255,255,.55), rgba(255,255,255,0) 65%),
         radial-gradient(1400px 900px at 50% 70%, var(--bg1), var(--bg2));
       font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
       overflow:hidden;
@@ -169,23 +169,19 @@
       <div class="pointer"></div>
       <canvas id="wheel" width="900" height="900"></canvas>
     </div>
-    <div class="historyBar" id="historyBar" aria-label="history"></div>
+    <div class="historyBar" id="historyBar"></div>
   </div>
 
 <script>
   const tg = window.Telegram?.WebApp;
-  if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor?.("#eef7ff"); }
-
-  // ====== СИНХРОНИЗАЦИЯ “каждые 6 секунд” (пока локально по времени) ======
-  // ВАЖНО: чтобы у всех было 100% одинаково — нужен сервер (следующий шаг).
-  const PERIOD_MS = 6000;
+  if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor?.("#eef4fb"); }
 
   // ====== 53 СЕКТОРА ======
   const N = 53;
   const step = (Math.PI * 2) / N;
   const startOffset = -Math.PI/2;
 
-  // позиции (как раньше)
+  // позиции (приближенно к часам)
   const IDX_HUGE = 0;
   const IDX_ORANGES = [13, 39];
   const IDX_BLUES   = [7, 20, 33, 46];
@@ -203,9 +199,9 @@
 
   sectors[IDX_HUGE] = { kind:"huge", label:"HUGE REDS", fill:COLORS.red, text:"#fff", icon:"fish" };
   for (const i of IDX_ORANGES) sectors[i] = { kind:"orange", label:"BIG ORANGES", fill:COLORS.orange, text:"#1b1b1b", icon:"fish" };
-  for (const i of IDX_BLUES)   sectors[i] = { kind:"blue", label:"LIL' BLUES", fill:COLORS.blue, text:"#fff", icon:"fish" };
+  for (const i of IDX_BLUES)   sectors[i] = { kind:"blue", label:"LIL BLUES", fill:COLORS.blue, text:"#fff", icon:"fish" };
 
-  // 46 leafs: 23/23, alternating
+  // 46 leaf: 23/23 alternating
   let leaf1Left = 23, leaf2Left = 23;
   let toggle = 0;
   for (let i=0;i<N;i++){
@@ -251,7 +247,17 @@
     return Math.floor(rel / step);
   }
 
-  // ==== ICONS (рисуем на canvas, ближе к внешнему краю) ====
+  // ==== крипто-рандом (чтобы не было заметного чередования) ====
+  function rand01(){
+    if (window.crypto?.getRandomValues){
+      const u = new Uint32Array(1);
+      crypto.getRandomValues(u);
+      return u[0] / 4294967296;
+    }
+    return Math.random();
+  }
+
+  // ==== ICONS ====
   function drawFishIcon(x,y,scale,fill){
     ctx.save();
     ctx.translate(x,y);
@@ -273,7 +279,6 @@
     ctx.beginPath();
     ctx.arc(8, -2, 2.2, 0, Math.PI*2);
     ctx.fill();
-
     ctx.restore();
   }
 
@@ -302,26 +307,23 @@
     ctx.restore();
   }
 
-  // ==== БОНУСНЫЙ ТЕКСТ: ВЕРТИКАЛЬНО ПО СЕКТОРУ, НЕ ВЫЛЕЗАЕТ ====
-  // Мы НЕ “крутим” текст на 90 градусов (как раньше), потому что он становился горизонтальным.
-  // Тут делаем: rotate(mid) -> translate(r) -> rotate(mid + 90) НЕ НУЖНО.
-  // Правильнее: rotate(mid) затем rotate(PI/2) чтобы текст был вдоль радиуса? Нет.
-  // Нужно "вдоль сектора" = вдоль радиуса наружу-внутрь? Обычно это вертикально (сверху вниз) по лучу.
-  // Сделаем текст вдоль радиуса: rotate(mid) -> translate(r) -> rotate(PI/2) и пишем ПО БУКВАМ вниз.
-  function drawVerticalText(text, x, y, maxChars, fill){
-    // Рисуем по буквам вниз (вертикально)
-    const t = text.slice(0, maxChars);
+  // ==== вертикальный текст, ниже и после рыбки ====
+  function drawVerticalChars(text, x, y, fill){
+    const t = text.replace(/'/g,"").replace(/\s+/g," ").trim();
     ctx.save();
     ctx.translate(x,y);
     ctx.fillStyle = fill;
-    ctx.font = "900 20px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.font = "900 16px system-ui, -apple-system, Segoe UI, Roboto, Arial"; // меньше
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    const lineH = 18;
-    const totalH = (t.length-1)*lineH;
-    for (let i=0;i<t.length;i++){
-      ctx.fillText(t[i], 0, -totalH/2 + i*lineH);
+    const lineH = 14; // компактнее
+    const maxLen = 10; // чтобы точно не вылезало
+    const s = t.slice(0, maxLen);
+    const totalH = (s.length-1)*lineH;
+
+    for (let i=0;i<s.length;i++){
+      ctx.fillText(s[i], 0, -totalH/2 + i*lineH);
     }
     ctx.restore();
   }
@@ -329,19 +331,19 @@
   function drawWheel(highlightIdx=null){
     ctx.clearRect(0,0,W,H);
 
-    // ледяная подложка
+    // фон колеса (серо-голубой лед)
     ctx.save();
     const ice = ctx.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
     ice.addColorStop(0, "rgba(255,255,255,0.96)");
-    ice.addColorStop(0.55, "rgba(220,242,255,0.98)");
-    ice.addColorStop(1, "rgba(170,215,245,0.96)");
+    ice.addColorStop(0.55, "rgba(222,236,247,0.98)");
+    ice.addColorStop(1, "rgba(184,205,224,0.96)");
     ctx.fillStyle = ice;
     ctx.beginPath();
     ctx.arc(cx,cy,outerR*1.05,0,Math.PI*2);
     ctx.fill();
     ctx.restore();
 
-    // темный обод
+    // обод
     ctx.save();
     const rimGrad = ctx.createRadialGradient(cx,cy,outerR*0.92, cx,cy,outerR*1.06);
     rimGrad.addColorStop(0, "rgba(18,27,47,0.95)");
@@ -353,7 +355,6 @@
     ctx.stroke();
     ctx.restore();
 
-    // секторы
     ctx.save();
     ctx.translate(cx,cy);
     ctx.rotate(angle);
@@ -383,27 +384,23 @@
 
       const mid = (a0+a1)/2;
 
-      // Иконка ближе к краю
-      const iconR = outerR*0.80;
+      // Иконка максимально ближе к краю
+      const iconR = outerR*0.82;
+
       ctx.save();
       ctx.rotate(mid);
       ctx.translate(iconR, 0);
 
-      // Иконки должны быть “ближе к верхней части сектора” — это как раз ближе к внешнему радиусу.
       if (sec.icon === "fish"){
-        // чуть смещаем к концу сектора (вверх)
         drawFishIcon(0, 0, 1.05, "rgba(255,255,255,0.92)");
-      } else {
-        drawLeafIcon(0, 0, 0.9, "rgba(255,255,255,0.80)");
-      }
 
-      // Текст бонусов: вертикально по сектору и не вылезает
-      if (sec.kind === "huge" || sec.kind === "orange" || sec.kind === "blue"){
-        // Смещаем текст чуть внутрь от иконки, но всё ещё ближе к краю
-        const textR = -outerR*0.10;
-        // Поворачиваем так, чтобы вертикальный текст “вдоль луча”
+        // ТЕКСТ ниже рыбки (смещение по “вертикали” после поворота)
+        // Для этого повернём локальную систему так, чтобы "низ" был вдоль радиуса к центру.
         ctx.rotate(Math.PI/2);
-        drawVerticalText(sec.label, 0, textR, 10, sec.text);
+        // y = +20 => вниз после рыбки
+        drawVerticalChars(sec.label, 0, 28, sec.text);
+      } else {
+        drawLeafIcon(0, 0, 0.9, "rgba(255,255,255,0.82)");
       }
 
       ctx.restore();
@@ -411,7 +408,7 @@
 
     ctx.restore();
 
-    // центр: только во время спина
+    // центр только во время спина
     if (spinning){
       ctx.save();
       ctx.translate(cx,cy);
@@ -442,7 +439,7 @@
       ctx.restore();
     }
 
-    // “болтики”
+    // болтики
     ctx.save();
     ctx.translate(cx,cy);
     const bolts = 18;
@@ -459,32 +456,29 @@
     ctx.restore();
   }
 
-  // ====== АНИМАЦИЯ: КАЖДЫЙ СПИН ОДИНАКОВО СИЛЬНЫЙ ======
+  // ====== СПИН: фиксированный каждый раз ======
   function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
 
-  // фиксируем параметры каждого спина (одинаковое "ощущение"):
-  const SPIN_TURNS = 9;        // всегда одинаковое число оборотов
-  const SPIN_MS = 4200;        // всегда одинаковая длительность
-  const JITTER = 0.18;         // небольшой джиттер внутри сектора (доля шага)
+  const SPIN_TURNS = 9;
+  const SPIN_MS = 4200;
+  const JITTER = 0.20;
 
-  function pickWinnerIndexForTick(tick){
-    // Пока локально: псевдо-рандом от tick (чтобы при обновлении было примерно одинаково на одном устройстве)
-    // Для 100% одинаково у всех — заменим на серверный результат.
-    let x = tick * 1103515245 + 12345;
-    x = (x >>> 0);
-    return x % N;
+  function pickWinnerIndex(){
+    return Math.floor(rand01() * N);
   }
 
-  async function spinToWinner(winnerIdx){
+  async function spinOnce(){
+    if (spinning) return;
     spinning = true;
-    setHUDModeSpinning(true);
+    setHUDSpinning(true);
+
+    const winnerIdx = pickWinnerIndex();
 
     const pointerWorld = -Math.PI/2;
     const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
     let target = pointerWorld - winnerCenter;
 
-    // одинаковое количество оборотов ВСЕГДА
-    const jitter = (pseudoRand01() - 0.5) * step * JITTER;
+    const jitter = (rand01() - 0.5) * step * JITTER;
     target = target + jitter - SPIN_TURNS * Math.PI * 2;
 
     const start = angle;
@@ -505,67 +499,54 @@
       requestAnimationFrame(frame);
     });
 
-    spinning = false;
-    setHUDModeSpinning(false);
-    drawWheel(null);
-
+    // фиксируем результат и записываем в историю
     const finalIdx = indexAtPointer(angle);
     addHistory(finalIdx);
+
+    spinning = false;
+    // после фиксации начинаем новый отсчёт 6 сек
+    startCountdown();
+    setHUDSpinning(false);
+    drawWheel(null);
   }
 
-  // простой PRNG для jitter (чтобы не зависеть от Math.random прыжками)
-  let prngState = 123456789;
-  function pseudoRand01(){
-    prngState = (1664525 * prngState + 1013904223) >>> 0;
-    return prngState / 4294967296;
-  }
-
-  // ====== HUD (таймер общий) ======
+  // ====== HUD: цикл "фиксировали -> 6..0 -> spin" ======
   const hudMain = document.getElementById("hudMain");
   const hudSub  = document.getElementById("hudSub");
+  let countdownTimer = null;
+  let secondsLeft = 6;
 
-  function setHUDModeSpinning(isSpin){
+  function setHUDSpinning(isSpin){
     if (isSpin){
       hudMain.textContent = "ICE FISHING";
       hudSub.textContent = "spinning";
     } else {
       hudSub.textContent = "до спина";
+      hudMain.textContent = String(secondsLeft);
     }
   }
 
-  // вычисляем сколько секунд до следующего глобального тика каждые 6 сек
-  function secondsToNextTick(nowMs){
-    const mod = nowMs % PERIOD_MS;
-    const left = PERIOD_MS - mod;
-    return Math.ceil(left / 1000);
+  function startCountdown(){
+    clearInterval(countdownTimer);
+    secondsLeft = 6;
+    hudMain.textContent = String(secondsLeft);
+    hudSub.textContent = "до спина";
+
+    countdownTimer = setInterval(()=>{
+      if (spinning) return;
+      secondsLeft -= 1;
+      if (secondsLeft <= 0){
+        clearInterval(countdownTimer);
+        spinOnce();
+        return;
+      }
+      hudMain.textContent = String(secondsLeft);
+    }, 1000);
   }
 
-  let lastTick = null;
-
-  function loop(){
-    const now = Date.now();
-    const tick = Math.floor(now / PERIOD_MS);
-
-    // таймер всегда "глобальный" по эпохе, а не от перезагрузки страницы
-    if (!spinning){
-      hudMain.textContent = String(secondsToNextTick(now));
-    }
-
-    // Если тик сменился — делаем спин
-    if (!spinning && tick !== lastTick){
-      lastTick = tick;
-      const winner = pickWinnerIndexForTick(tick);
-      // Чтобы каждый тик начинался синхронно, даём маленький сдвиг до границы тика:
-      // (мы уже на новом тике, запускаем сразу)
-      spinToWinner(winner);
-    }
-
-    requestAnimationFrame(loop);
-  }
-
-  // ====== История снизу ======
+  // ====== История ======
   const historyBar = document.getElementById("historyBar");
-  const history = []; // последние N выпадений
+  const history = [];
   const HISTORY_MAX = 18;
 
   function addHistory(idx){
@@ -587,9 +568,8 @@
 
   // старт
   drawWheel(null);
-  lastTick = Math.floor(Date.now() / PERIOD_MS);
   renderHistory();
-  requestAnimationFrame(loop);
+  startCountdown();
 </script>
 </body>
 </html>
