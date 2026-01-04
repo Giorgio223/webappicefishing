@@ -212,4 +212,321 @@
 
   // “сердечко/капля” паттерн как на скрине — рисуем маленькими символами
   function drawPatternInSlice(a0, a1){
-    // делаем 2-3 ряда символов вдоль рад
+    // делаем 2-3 ряда символов вдоль радиуса
+    const rows = 3;
+    for (let r=1; r<=rows; r++){
+      const rr = outerR*(0.42 + r*0.12);
+      const mid = (a0+a1)/2;
+      ctx.save();
+      ctx.rotate(mid);
+      ctx.translate(rr, 0);
+      ctx.rotate(Math.PI/2);
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.font = "800 34px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      // символ похожий на “каплю/сердце”
+      ctx.fillText("❄︎", 0, 0);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawBanner(sec){
+    // Баннер в стиле “ленты” возле внешнего края
+    // Сделаем прямоугольник с закруглением и “вырезом” как на скрине.
+    const bannerW = outerR*0.56;
+    const bannerH = outerR*0.12;
+    const bannerR = outerR*0.83;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+
+    // Баннер ориентирован по сектору (его середина)
+    // Мы уже на повороте колеса angle, но баннер рисуем внутри вращения:
+    // Вызываем из drawWheel в повернутых координатах (ниже).
+    ctx.restore();
+  }
+
+  function roundRect(x,y,w,h,r){
+    const rr = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);
+    ctx.arcTo(x+w,y,x+w,y+h,rr);
+    ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr);
+    ctx.arcTo(x,y,x+w,y,rr);
+    ctx.closePath();
+  }
+
+  function drawWheel(highlightIdx=null){
+    ctx.clearRect(0,0,W,H);
+
+    // Ледяной фон под колесом
+    ctx.save();
+    const grd = ctx.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
+    grd.addColorStop(0,"rgba(255,255,255,0.90)");
+    grd.addColorStop(0.55,"rgba(220,238,255,0.95)");
+    grd.addColorStop(1,"rgba(170,210,245,0.95)");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(cx,cy,outerR*1.03,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+
+    // Темный обод как на скрине
+    ctx.save();
+    const rimGrad = ctx.createRadialGradient(cx,cy,outerR*0.93, cx,cy,outerR*1.03);
+    rimGrad.addColorStop(0, "rgba(21,32,51,0.95)");
+    rimGrad.addColorStop(1, "rgba(7,10,18,0.95)");
+    ctx.strokeStyle = rimGrad;
+    ctx.lineWidth = outerR*0.10;
+    ctx.beginPath();
+    ctx.arc(cx,cy,outerR*1.01,0,Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Сектора
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(angle);
+
+    for (let i=0;i<N;i++){
+      const a0 = i*step;
+      const a1 = a0 + step;
+      const sec = sectors[i];
+
+      // узкие голубые “лучи”
+      const baseFill = (i%2===0) ? "rgba(120,185,235,0.70)" : "rgba(90,165,225,0.68)";
+      const baseFill2 = (i%2===0) ? "rgba(240,250,255,0.65)" : "rgba(230,246,255,0.62)";
+
+      const isHi = (highlightIdx===i);
+
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      ctx.arc(0,0, outerR*0.90, a0, a1);
+      ctx.closePath();
+
+      if (sec.kind === "base"){
+        // градиент “лед”
+        const g = ctx.createRadialGradient(0,0,innerR,0,0,outerR*0.95);
+        g.addColorStop(0, baseFill2);
+        g.addColorStop(1, baseFill);
+        ctx.fillStyle = g;
+      } else {
+        // спец сектор чуть выделим мягко
+        const g = ctx.createRadialGradient(0,0,innerR,0,0,outerR*0.95);
+        g.addColorStop(0, "rgba(255,255,255,0.85)");
+        g.addColorStop(1, "rgba(120,185,235,0.55)");
+        ctx.fillStyle = g;
+      }
+      ctx.fill();
+
+      // подсветка под pointer (минимальная)
+      if (isHi){
+        ctx.fillStyle = "rgba(94,234,212,0.14)";
+        ctx.fill();
+      }
+
+      // тонкие разделители
+      ctx.strokeStyle = "rgba(255,255,255,0.22)";
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+
+      // паттерн снежинки
+      if (sec.kind === "base"){
+        drawPatternInSlice(a0,a1);
+      }
+    }
+
+    // Баннеры на спец секторах (как на скрине — ленты с текстом)
+    for (let i=0;i<N;i++){
+      const sec = sectors[i];
+      if (sec.kind !== "special") continue;
+
+      const mid = (i+0.5)*step;
+
+      ctx.save();
+      ctx.rotate(mid);
+
+      const bannerW = outerR*0.58;
+      const bannerH = outerR*0.12;
+      const r = outerR*0.74;
+
+      // сам баннер
+      ctx.translate(r, 0);
+      ctx.rotate(Math.PI/2);
+
+      // тень
+      ctx.save();
+      ctx.translate(0, 4);
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      roundRect(-bannerW/2, -bannerH/2, bannerW, bannerH, bannerH*0.45);
+      ctx.fill();
+      ctx.restore();
+
+      // заливка
+      ctx.fillStyle = sec.color;
+      roundRect(-bannerW/2, -bannerH/2, bannerW, bannerH, bannerH*0.45);
+      ctx.fill();
+
+      // маленькие “уши” по бокам (как хвостики ленточки)
+      ctx.fillStyle = "rgba(0,0,0,0.10)";
+      ctx.beginPath();
+      ctx.moveTo(-bannerW/2, -bannerH/2);
+      ctx.lineTo(-bannerW/2 - bannerH*0.35, 0);
+      ctx.lineTo(-bannerW/2, bannerH/2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(bannerW/2, -bannerH/2);
+      ctx.lineTo(bannerW/2 + bannerH*0.35, 0);
+      ctx.lineTo(bannerW/2, bannerH/2);
+      ctx.closePath();
+      ctx.fill();
+
+      // текст
+      ctx.fillStyle = sec.text;
+      ctx.font = `900 ${Math.floor(bannerH*0.48)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.letterSpacing = "1px";
+      ctx.fillText(sec.label, 0, 1);
+
+      ctx.restore();
+    }
+
+    ctx.restore();
+
+    // Центр (эмблема ICE FISHING)
+    ctx.save();
+    ctx.translate(cx,cy);
+
+    // внешний белый круг
+    ctx.beginPath();
+    ctx.arc(0,0, innerR*1.55, 0, Math.PI*2);
+    ctx.fillStyle = "rgba(255,255,255,0.90)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.08)";
+    ctx.lineWidth = 8;
+    ctx.stroke();
+
+    // внутренний круг
+    ctx.beginPath();
+    ctx.arc(0,0, innerR*1.05, 0, Math.PI*2);
+    ctx.fillStyle = "rgba(240,250,255,0.95)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.10)";
+    ctx.lineWidth = 6;
+    ctx.stroke();
+
+    // текст ICE FISHING
+    ctx.fillStyle = "rgba(11,18,32,0.90)";
+    ctx.font = `900 ${Math.floor(innerR*0.38)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("ICE", 0, -innerR*0.18);
+    ctx.fillText("FISHING", 0, innerR*0.20);
+
+    ctx.restore();
+
+    // маленькие “болтики” на ободе (ощущение механики)
+    ctx.save();
+    ctx.translate(cx,cy);
+    const bolts = 18;
+    for (let i=0;i<bolts;i++){
+      const a = (i/bolts)*Math.PI*2;
+      const r = outerR*1.01;
+      const x = Math.cos(a)*r;
+      const y = Math.sin(a)*r;
+      ctx.beginPath();
+      ctx.arc(x,y, outerR*0.012, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(255,255,255,0.25)";
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ====== SPIN (с замедлением как у “live wheels”) ======
+  function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
+
+  function pickWinnerIndex(){
+    // Сейчас равновероятно среди 53
+    // Позже сделаем веса/редкости (как у провайдера)
+    return Math.floor(Math.random()*N);
+  }
+
+  async function spin(){
+    if (spinning) return;
+    spinning = true;
+    status.textContent = "SPINNING";
+    spinBtn.disabled = true;
+
+    const winner = pickWinnerIndex();
+
+    // хотим, чтобы победитель оказался под указателем (вверху)
+    const pointerWorld = -Math.PI/2;
+    const winnerCenter = (winner + 0.5)*step;
+
+    let target = pointerWorld - winnerCenter;
+
+    // 7–10 оборотов, как на скрине (достаточно долго и “по-настоящему”)
+    const extraTurns = 7 + Math.floor(Math.random()*4);
+    // микроджиттер внутри сектора
+    const jitter = (Math.random()-0.5)*step*0.25;
+
+    target = target + jitter - extraTurns*Math.PI*2;
+
+    const start = angle;
+    const end = target;
+
+    const duration = 5200 + Math.floor(Math.random()*900);
+    const t0 = performance.now();
+
+    await new Promise(resolve=>{
+      function frame(now){
+        const t = Math.min(1,(now-t0)/duration);
+        const k = easeOutCubic(t);
+        angle = start + (end-start)*k;
+
+        const hi = indexAtPointer(angle);
+        drawWheel(hi);
+
+        if (t<1) requestAnimationFrame(frame);
+        else resolve();
+      }
+      requestAnimationFrame(frame);
+    });
+
+    const finalIdx = indexAtPointer(angle);
+    winText.textContent = winName(sectors[finalIdx]);
+    winIdx.textContent = `${finalIdx+1} / ${N}`;
+    status.textContent = "WIN!";
+
+    // Если захочешь — отправим результат в бота:
+    // tg?.sendData?.(JSON.stringify({ idx: finalIdx, name: winName(sectors[finalIdx]) }));
+
+    spinBtn.disabled = false;
+    spinning = false;
+  }
+
+  function reset(){
+    if (spinning) return;
+    angle = 0;
+    winText.textContent = "—";
+    winIdx.textContent = "—";
+    status.textContent = "READY";
+    drawWheel(null);
+  }
+
+  spinBtn.addEventListener("click", spin);
+  resetBtn.addEventListener("click", reset);
+
+  drawWheel(null);
+</script>
+</body>
+</html>
