@@ -8,10 +8,15 @@
   <style>
     :root{
       --bg1:#eef7ff; --bg2:#cfe6ff;
-      --ring:#0b1220; --ring2:#121b2f;
-      --ice1:#e9f6ff; --ice2:#9ad4ff;
-      --leaf1:#424b57; --leaf2:#8b95a4;
-      --red:#d64545; --orange:#f59e0b; --blue:#2563eb;
+
+      --ring1:#0b1220; --ring2:#121b2f;
+
+      --leaf1:#3f4752;  /* темно-серый */
+      --leaf2:#9aa3b1;  /* светло-серый */
+
+      --red:#d64545;
+      --orange:#f59e0b;
+      --blue:#2563eb;
     }
     *{box-sizing:border-box}
     body{
@@ -25,8 +30,8 @@
       overflow:hidden;
     }
 
-    /* Левый бренд (как просил) */
-    .brand{
+    /* левый блок (таймер/название) */
+    .leftHUD{
       position:fixed;
       left:12px; top:14px;
       display:flex; align-items:center; gap:10px;
@@ -37,8 +42,7 @@
     .cube{
       width:34px; height:34px;
       border-radius:10px;
-      background:
-        linear-gradient(135deg, rgba(255,255,255,.95), rgba(180,225,255,.75));
+      background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(180,225,255,.75));
       border:1px solid rgba(0,0,0,.10);
       box-shadow: 0 10px 22px rgba(0,0,0,.14);
       position:relative;
@@ -51,13 +55,14 @@
       border:1px solid rgba(255,255,255,.65);
       opacity:.9;
     }
-    .brand .text{
+    .hudText{
       font-weight:950;
       letter-spacing:.6px;
       color:#0b1220;
       line-height:1;
+      min-width:140px;
     }
-    .brand .text small{
+    .hudText small{
       display:block;
       font-weight:900;
       opacity:.75;
@@ -66,7 +71,7 @@
       font-size:11px;
     }
 
-    /* Сцена с колесом */
+    /* сцена */
     .stage{
       position:absolute;
       inset:0;
@@ -85,8 +90,6 @@
       width:100%;
       height:100%;
       border-radius:50%;
-      cursor:pointer;
-      touch-action: manipulation;
     }
 
     /* указатель сверху */
@@ -112,86 +115,71 @@
       border-top:18px solid rgba(255,255,255,.92);
       opacity:.9;
     }
-
-    /* маленькая подсказка (не “результат”) */
-    .hint{
-      position:fixed;
-      left:12px;
-      bottom:12px;
-      z-index:5;
-      background: rgba(255,255,255,.70);
-      border:1px solid rgba(0,0,0,.08);
-      border-radius:14px;
-      padding:10px 12px;
-      font-weight:850;
-      color:#0b1220;
-      box-shadow: 0 12px 26px rgba(0,0,0,.12);
-      user-select:none;
-      pointer-events:none;
-      font-size:12px;
-      opacity:.9;
-    }
   </style>
 </head>
 <body>
-  <div class="brand">
+  <div class="leftHUD">
     <div class="cube"></div>
-    <div class="text">ICE FISHING<small>tap wheel to spin</small></div>
+    <div class="hudText" id="hudText">
+      <span id="hudMain">6</span>
+      <small id="hudSub">до спина</small>
+    </div>
   </div>
 
   <div class="stage">
     <div class="wheelWrap">
       <div class="pointer"></div>
-      <canvas id="wheel" width="900" height="900" aria-label="wheel"></canvas>
+      <canvas id="wheel" width="900" height="900"></canvas>
     </div>
   </div>
-
-  <div class="hint">Нажми на колесо, чтобы крутить</div>
 
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor?.("#eef7ff"); }
 
-  // ====== СХЕМА СЕКТОРОВ: 53 ======
+  // ====== 53 СЕКТОРА С ТОЧНЫМ РАСПРЕДЕЛЕНИЕМ ======
   const N = 53;
   const step = (Math.PI * 2) / N;
+  const startOffset = -Math.PI/2; // сектор 0 — на 12 часов
 
-  // Индексы, приближенные к "часам" при 53 секторах:
-  // 12:00 ~ 0
-  // 3:00  ~ 13
-  // 9:00  ~ 39
-  // 1:30  ~ 7
-  // 4:30  ~ 20
-  // 7:30  ~ 33
-  // 10:30 ~ 46
-  const IDX_HUGE = 0;
-  const IDX_ORANGES = [13, 39];
-  const IDX_BLUES   = [7, 20, 33, 46];
+  // Позиции "как по часам" (приближенно для 53)
+  const IDX_HUGE = 0;                 // 12:00
+  const IDX_ORANGES = [13, 39];       // 3:00 и 9:00
+  const IDX_BLUES   = [7, 20, 33, 46];// 1:30, 4:30, 7:30, 10:30
 
-  const kindAt = Array(N).fill(null);
-  kindAt[IDX_HUGE] = {kind:"huge", label:"HUGE REDS", color:getComputedStyle(document.documentElement).getPropertyValue('--red').trim(), text:"#fff", icon:"fish"};
-  for (const i of IDX_ORANGES) kindAt[i] = {kind:"orange", label:"BIG ORANGES", color:getComputedStyle(document.documentElement).getPropertyValue('--orange').trim(), text:"#1b1b1b", icon:"fish"};
-  for (const i of IDX_BLUES)   kindAt[i] = {kind:"blue", label:"LIL' BLUES", color:getComputedStyle(document.documentElement).getPropertyValue('--blue').trim(), text:"#fff", icon:"fish"};
+  const css = getComputedStyle(document.documentElement);
+  const COLORS = {
+    red:    css.getPropertyValue('--red').trim(),
+    orange: css.getPropertyValue('--orange').trim(),
+    blue:   css.getPropertyValue('--blue').trim(),
+    leaf1:  css.getPropertyValue('--leaf1').trim(),
+    leaf2:  css.getPropertyValue('--leaf2').trim(),
+  };
 
-  // Заполняем оставшиеся 46 как Leaf1/Leaf2 (23/23), строго чередуя
+  const sectors = Array.from({length:N}, ()=>null);
+
+  sectors[IDX_HUGE] = { kind:"huge", label:"HUGE REDS", fill:COLORS.red, text:"#fff", icon:"fish" };
+  for (const i of IDX_ORANGES) sectors[i] = { kind:"orange", label:"BIG ORANGES", fill:COLORS.orange, text:"#1b1b1b", icon:"fish" };
+  for (const i of IDX_BLUES)   sectors[i] = { kind:"blue", label:"LIL' BLUES", fill:COLORS.blue, text:"#fff", icon:"fish" };
+
+  // 46 обычных: 23 leaf1 и 23 leaf2, чередуются
   let leaf1Left = 23, leaf2Left = 23;
   let toggle = 0;
   for (let i=0;i<N;i++){
-    if (kindAt[i]) continue;
-    const useLeaf1 = (toggle % 2 === 0);
-    if (useLeaf1 && leaf1Left > 0){
-      kindAt[i] = {kind:"leaf1", label:"", color:getComputedStyle(document.documentElement).getPropertyValue('--leaf1').trim(), text:"#fff", icon:"leaf"};
+    if (sectors[i]) continue;
+    const wantLeaf1 = (toggle % 2 === 0);
+    if (wantLeaf1 && leaf1Left > 0){
+      sectors[i] = { kind:"leaf1", label:"", fill:COLORS.leaf1, text:"#fff", icon:"leaf" };
       leaf1Left--;
-    } else if (!useLeaf1 && leaf2Left > 0){
-      kindAt[i] = {kind:"leaf2", label:"", color:getComputedStyle(document.documentElement).getPropertyValue('--leaf2').trim(), text:"#fff", icon:"leaf"};
+    } else if (!wantLeaf1 && leaf2Left > 0){
+      sectors[i] = { kind:"leaf2", label:"", fill:COLORS.leaf2, text:"#fff", icon:"leaf" };
       leaf2Left--;
     } else {
-      // если один закончился — докидываем остаток другим
       if (leaf1Left > 0){
-        kindAt[i] = {kind:"leaf1", label:"", color:getComputedStyle(document.documentElement).getPropertyValue('--leaf1').trim(), text:"#fff", icon:"leaf"};
+        sectors[i] = { kind:"leaf1", label:"", fill:COLORS.leaf1, text:"#fff", icon:"leaf" };
         leaf1Left--;
       } else {
-        kindAt[i] = {kind:"leaf2", label:"", color:getComputedStyle(document.documentElement).getPropertyValue('--leaf2').trim(), text:"#fff", icon:"leaf"};
+        sectors[i] = { kind:"leaf2", label:"", fill:COLORS.leaf2, text:"#fff", icon:"leaf" };
         leaf2Left--;
       }
     }
@@ -203,45 +191,36 @@
   const ctx = canvas.getContext("2d");
   const W = canvas.width, H = canvas.height;
   const cx = W/2, cy = H/2;
+
   const outerR = Math.min(W,H)*0.47;
-  const rimR   = outerR*1.02;
   const innerR = outerR*0.22;
 
-  // Угол колеса
   let angle = 0;
   let spinning = false;
-
-  // Ориентация: чтобы сектор 0 был на 12 часов при angle=0
-  const startOffset = -Math.PI/2; // верх
 
   function normalize(a){
     const t = Math.PI*2;
     return ((a%t)+t)%t;
   }
 
-  // индекс под указателем (верх)
   function indexAtPointer(a){
-    // pointerWorld = -PI/2, но мы уже используем startOffset=-PI/2 при отрисовке
-    // поэтому индекс считаем так, чтобы при angle=0 -> idx=0
+    // pointerWorld = -PI/2, startOffset = -PI/2 => при angle=0 индекс 0 сверху
     const pointerWorld = -Math.PI/2;
     const rel = normalize(pointerWorld - a - startOffset);
     return Math.floor(rel / step);
   }
 
-  // Иконка рыбки (простая силуэтная, маленькая)
+  // ==== ИКОНКИ ====
   function drawFishIcon(x,y,scale,fill){
     ctx.save();
     ctx.translate(x,y);
     ctx.scale(scale, scale);
-
     ctx.fillStyle = fill;
 
-    // тело (овал)
     ctx.beginPath();
     ctx.ellipse(0, 0, 14, 9, 0, 0, Math.PI*2);
     ctx.fill();
 
-    // хвост (треугольник)
     ctx.beginPath();
     ctx.moveTo(-14, 0);
     ctx.lineTo(-26, -10);
@@ -249,7 +228,6 @@
     ctx.closePath();
     ctx.fill();
 
-    // глаз
     ctx.fillStyle = "rgba(255,255,255,0.9)";
     ctx.beginPath();
     ctx.arc(8, -2, 2.2, 0, Math.PI*2);
@@ -258,7 +236,6 @@
     ctx.restore();
   }
 
-  // Иконка листика (простая)
   function drawLeafIcon(x,y,scale,stroke){
     ctx.save();
     ctx.translate(x,y);
@@ -269,7 +246,6 @@
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    // контур листа
     ctx.beginPath();
     ctx.moveTo(0, 12);
     ctx.quadraticCurveTo(18, 2, 0, -14);
@@ -277,7 +253,6 @@
     ctx.closePath();
     ctx.stroke();
 
-    // прожилка
     ctx.beginPath();
     ctx.moveTo(0, 10);
     ctx.lineTo(0, -12);
@@ -286,6 +261,7 @@
     ctx.restore();
   }
 
+  // ==== РИСОВАНИЕ ====
   function roundRect(x,y,w,h,r){
     const rr = Math.min(r, w/2, h/2);
     ctx.beginPath();
@@ -303,7 +279,7 @@
     // ледяная подложка
     ctx.save();
     const ice = ctx.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
-    ice.addColorStop(0, "rgba(255,255,255,0.95)");
+    ice.addColorStop(0, "rgba(255,255,255,0.96)");
     ice.addColorStop(0.55, "rgba(220,242,255,0.98)");
     ice.addColorStop(1, "rgba(170,215,245,0.96)");
     ctx.fillStyle = ice;
@@ -312,7 +288,7 @@
     ctx.fill();
     ctx.restore();
 
-    // тёмный обод
+    // темный обод
     ctx.save();
     const rimGrad = ctx.createRadialGradient(cx,cy,outerR*0.92, cx,cy,outerR*1.06);
     rimGrad.addColorStop(0, "rgba(18,27,47,0.95)");
@@ -332,45 +308,37 @@
     for (let i=0;i<N;i++){
       const a0 = i*step + startOffset;
       const a1 = a0 + step;
-      const sec = kindAt[i];
+      const sec = sectors[i];
       const isHi = (highlightIdx===i);
 
-      // форма сектора
+      // сектор
       ctx.beginPath();
       ctx.moveTo(0,0);
       ctx.arc(0,0, outerR*0.90, a0, a1);
       ctx.closePath();
 
-      if (sec.kind === "leaf1" || sec.kind === "leaf2"){
-        // серые листы (чередование)
-        const g = ctx.createRadialGradient(0,0,innerR,0,0,outerR*0.95);
-        g.addColorStop(0, "rgba(255,255,255,0.55)");
-        g.addColorStop(1, sec.color);
-        ctx.fillStyle = g;
-        ctx.fill();
-      } else {
-        // бонусные сектора всё равно сидят на “ледяном” фоне, а баннер — отдельно
-        const g = ctx.createRadialGradient(0,0,innerR,0,0,outerR*0.95);
-        g.addColorStop(0, "rgba(255,255,255,0.82)");
-        g.addColorStop(1, "rgba(120,185,235,0.55)");
-        ctx.fillStyle = g;
-        ctx.fill();
-      }
+      // БОНУСЫ: заливка целиком цветом (как ты просил)
+      // Обычные: серые (чередование)
+      let fill = sec.fill;
 
-      // подсветка “текущего” под указателем (очень мягко)
+      // лёгкий “ледяной” блик поверх всех
+      ctx.fillStyle = fill;
+      ctx.fill();
+
+      // мягкая подсветка
       if (isHi){
-        ctx.fillStyle = "rgba(255,255,255,0.12)";
+        ctx.fillStyle = "rgba(255,255,255,0.10)";
         ctx.fill();
       }
 
       // разделители
-      ctx.strokeStyle = "rgba(255,255,255,0.20)";
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.lineWidth = 1.1;
       ctx.stroke();
 
-      // ИКОНКИ: рыбка на бонусах, листик на обычных
+      // Иконки ближе к внешнему краю (вверх сектора)
       const mid = (a0+a1)/2;
-      const iconR = outerR*0.58;
+      const iconR = outerR*0.74; // было ближе к центру — теперь ближе к краю
 
       ctx.save();
       ctx.rotate(mid);
@@ -383,95 +351,57 @@
         drawLeafIcon(0, 0, 0.9, "rgba(255,255,255,0.78)");
       }
       ctx.restore();
+
+      // Текст внутри БОНУСНЫХ ячеек (вписан в сектор)
+      if (sec.kind === "huge" || sec.kind === "orange" || sec.kind === "blue"){
+        const textR = outerR*0.60; // текст чуть ниже иконки, но всё ещё ближе к краю чем к центру
+        ctx.save();
+        ctx.rotate(mid);
+        ctx.translate(textR, 0);
+        ctx.rotate(Math.PI/2);
+
+        ctx.fillStyle = sec.text;
+        ctx.font = "900 26px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(sec.label, 0, 0);
+
+        ctx.restore();
+      }
     }
 
-    // БАННЕРЫ на бонусах (как на скрине)
-    for (let i=0;i<N;i++){
-      const sec = kindAt[i];
-      if (!(sec.kind === "huge" || sec.kind === "orange" || sec.kind === "blue")) continue;
+    ctx.restore();
 
-      const mid = (i+0.5)*step + startOffset;
-
+    // центр — только когда вращается: "ICE FISHING"
+    if (spinning){
       ctx.save();
-      ctx.rotate(mid);
-
-      const bannerW = outerR*0.60;
-      const bannerH = outerR*0.12;
-      const r = outerR*0.76;
-
-      ctx.translate(r, 0);
-      ctx.rotate(Math.PI/2);
-
-      // тень
-      ctx.save();
-      ctx.translate(0, 4);
-      ctx.globalAlpha = 0.33;
-      ctx.fillStyle = "rgba(0,0,0,0.45)";
-      roundRect(-bannerW/2, -bannerH/2, bannerW, bannerH, bannerH*0.45);
-      ctx.fill();
-      ctx.restore();
-
-      // заливка
-      ctx.fillStyle = sec.color;
-      roundRect(-bannerW/2, -bannerH/2, bannerW, bannerH, bannerH*0.45);
-      ctx.fill();
-
-      // “ушки”
-      ctx.fillStyle = "rgba(0,0,0,0.10)";
-      ctx.beginPath();
-      ctx.moveTo(-bannerW/2, -bannerH/2);
-      ctx.lineTo(-bannerW/2 - bannerH*0.35, 0);
-      ctx.lineTo(-bannerW/2, bannerH/2);
-      ctx.closePath();
-      ctx.fill();
+      ctx.translate(cx,cy);
 
       ctx.beginPath();
-      ctx.moveTo(bannerW/2, -bannerH/2);
-      ctx.lineTo(bannerW/2 + bannerH*0.35, 0);
-      ctx.lineTo(bannerW/2, bannerH/2);
-      ctx.closePath();
+      ctx.arc(0,0, innerR*1.55, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
       ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.08)";
+      ctx.lineWidth = 10;
+      ctx.stroke();
 
-      // текст
-      ctx.fillStyle = sec.text;
-      ctx.font = `900 ${Math.floor(bannerH*0.48)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+      ctx.beginPath();
+      ctx.arc(0,0, innerR*1.05, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(240,250,255,0.96)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.10)";
+      ctx.lineWidth = 6;
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(11,18,32,0.90)";
+      ctx.font = `950 ${Math.floor(innerR*0.38)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(sec.label, 0, 1);
+      ctx.fillText("ICE", 0, -innerR*0.18);
+      ctx.fillText("FISHING", 0, innerR*0.20);
 
       ctx.restore();
     }
-
-    ctx.restore();
-
-    // Центр (без "результата", просто эмблема)
-    ctx.save();
-    ctx.translate(cx,cy);
-
-    ctx.beginPath();
-    ctx.arc(0,0, innerR*1.55, 0, Math.PI*2);
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.08)";
-    ctx.lineWidth = 10;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(0,0, innerR*1.05, 0, Math.PI*2);
-    ctx.fillStyle = "rgba(240,250,255,0.96)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.10)";
-    ctx.lineWidth = 6;
-    ctx.stroke();
-
-    ctx.fillStyle = "rgba(11,18,32,0.90)";
-    ctx.font = `950 ${Math.floor(innerR*0.38)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("ICE", 0, -innerR*0.18);
-    ctx.fillText("FISHING", 0, innerR*0.20);
-
-    ctx.restore();
 
     // “болтики” на ободе
     ctx.save();
@@ -490,17 +420,18 @@
     ctx.restore();
   }
 
-  // ====== SPIN: без кнопок, запускается кликом по колесу ======
+  // ====== АВТО-СПИН КАЖДЫЕ 6 СЕК ======
   function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
 
-  // Пока равная вероятность. Дальше можем сделать веса “как у провайдера”.
   function pickWinnerIndex(){
+    // пока равновероятно по 53
     return Math.floor(Math.random()*N);
   }
 
   async function spin(){
     if (spinning) return;
     spinning = true;
+    setHUDModeSpinning(true);
 
     const winner = pickWinnerIndex();
 
@@ -516,7 +447,7 @@
     const start = angle;
     const end = target;
 
-    const duration = 5200 + Math.floor(Math.random()*900);
+    const duration = 4200; // чтобы уложиться и оставалось время до следующего спина
     const t0 = performance.now();
 
     await new Promise(resolve=>{
@@ -534,18 +465,49 @@
       requestAnimationFrame(frame);
     });
 
-    // Никаких “результатов” на экране — как ты просил.
-    // Но если позже нужно отправлять в бота:
-    // const finalIdx = indexAtPointer(angle);
-    // tg?.sendData?.(JSON.stringify({ idx: finalIdx, kind: kindAt[finalIdx].kind }));
-
     spinning = false;
+    setHUDModeSpinning(false);
+    drawWheel(null);
   }
 
-  canvas.addEventListener("click", spin);
-  canvas.addEventListener("touchend", (e)=>{ e.preventDefault(); spin(); }, {passive:false});
+  // ====== HUD: таймер vs ICE FISHING ======
+  const hudMain = document.getElementById("hudMain");
+  const hudSub  = document.getElementById("hudSub");
 
+  let countdown = 6;
+  let timerId = null;
+
+  function setHUDModeSpinning(isSpin){
+    if (isSpin){
+      hudMain.textContent = "ICE FISHING";
+      hudSub.textContent = "spinning";
+    } else {
+      hudMain.textContent = String(countdown);
+      hudSub.textContent = "до спина";
+    }
+  }
+
+  function startCountdownLoop(){
+    // каждые 1 сек обновляем цифру
+    timerId = setInterval(async ()=>{
+      if (spinning) return; // во время спина HUD уже ICE FISHING
+      countdown -= 1;
+      if (countdown <= 0){
+        countdown = 6; // сразу сброс на следующий цикл
+        // запускаем спин
+        spin();
+      }
+      setHUDModeSpinning(false);
+    }, 1000);
+  }
+
+  // старт: отрисовать и запустить
   drawWheel(null);
+  startCountdownLoop();
+
+  // чтобы сразу через 6 секунд первый спин (и показалось что “живое”)
+  // если хочешь первый спин сразу — раскомментируй:
+  // spin();
 </script>
 </body>
 </html>
