@@ -6,7 +6,7 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-const PERIOD_MS = 6000;
+const PERIOD_MS = 10000;
 const N = 53;
 const HISTORY_MAX = 18;
 
