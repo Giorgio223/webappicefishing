@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IceFishing</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body style="font-family: system-ui; padding: 16px;">
+  <h2>IceFishing WebApp 🎣</h2>
+  <p id="user">Загрузка...</p>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+    document.getElementById("user").innerText =
+      "User: " + JSON.stringify(tg.initDataUnsafe?.user || null);
+  </script>
+</body>
+</html>
