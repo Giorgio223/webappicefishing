@@ -6,7 +6,7 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-const PERIOD_MS = 9000;   // ✅ 9 секунд
+const PERIOD_MS = 6000;
 const N = 53;
 const HISTORY_MAX = 18;
 
@@ -17,8 +17,9 @@ function winnerForRound(roundId) {
   return (num >>> 0) % N;
 }
 
-function safeParseHistoryItem(item) {
-  if (item && typeof item === "object") {
+function safeParse(item) {
+  if (!item) return null;
+  if (typeof item === "object") {
     if (typeof item.roundId === "number" && typeof item.winnerIndex === "number") return item;
     if (typeof item.value === "string") item = item.value;
     else return null;
@@ -27,22 +28,25 @@ function safeParseHistoryItem(item) {
   try {
     const obj = JSON.parse(item);
     if (obj && typeof obj.roundId === "number" && typeof obj.winnerIndex === "number") return obj;
-    return null;
-  } catch {
-    return null;
-  }
+  } catch {}
+  return null;
 }
 
-async function rebuildHistoryToFinishedRound(finishedRoundId) {
+async function rebuildHistoryToRound(roundId) {
   await redis.del("wheel:history");
-  const from = Math.max(0, finishedRoundId - (HISTORY_MAX - 1));
-  for (let r = from; r <= finishedRoundId; r++) {
-    await redis.rpush(
-      "wheel:history",
-      JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) })
-    );
+  const from = Math.max(0, roundId - (HISTORY_MAX - 1));
+  for (let r = from; r <= roundId; r++) {
+    const w = winnerForRound(r);
+    await redis.rpush("wheel:history", JSON.stringify({ roundId: r, winnerIndex: w }));
   }
-  await redis.set("wheel:lastFinishedRoundId", finishedRoundId);
+  await redis.set("wheel:lastRoundId", roundId);
+}
+
+function uniqByRoundId(arr) {
+  // оставляем только последний элемент для каждого roundId
+  const map = new Map();
+  for (const x of arr) map.set(x.roundId, x);
+  return Array.from(map.values()).sort((a,b)=>a.roundId-b.roundId);
 }
 
 export default async function handler(req, res) {
@@ -51,70 +55,78 @@ export default async function handler(req, res) {
     res.setHeader("Content-Type", "application/json");
 
     const now = Date.now();
-
-    // ✅ ПРАВИЛЬНО:
-    // currentRoundId = текущий активный раунд
-    // finishedRoundId = последний полностью завершённый
-    const currentRoundId = Math.floor(now / PERIOD_MS);
-    const finishedRoundId = currentRoundId - 1;
-
-    const startAt = currentRoundId * PERIOD_MS;
+    const roundId = Math.floor(now / PERIOD_MS);
+    const startAt = roundId * PERIOD_MS;
     const endAt = startAt + PERIOD_MS;
 
-    // обновляем историю только до finishedRoundId
-    const lastFinishedRaw = await redis.get("wheel:lastFinishedRoundId");
-    const lastFinished = lastFinishedRaw === null ? null : Number(lastFinishedRaw);
+    // ---------- 1) LOCK на обновление истории ----------
+    // если параллельно пришли 2 запроса — только один сможет обновить историю
+    const lockKey = `wheel:lock:${roundId}`;
+    const gotLock = await redis.set(lockKey, "1", { nx: true, px: 4500 }); // держим ~4.5 сек
 
-    // ✅ если из-за прошлой ошибки lastFinished оказался "в будущем" — пересобираем
-    if (lastFinished !== null && lastFinished > finishedRoundId) {
-      await rebuildHistoryToFinishedRound(finishedRoundId);
-    } else if (lastFinished === null) {
-      await rebuildHistoryToFinishedRound(finishedRoundId);
-    } else if (lastFinished < finishedRoundId) {
-      for (let r = lastFinished + 1; r <= finishedRoundId; r++) {
-        await redis.lpush(
-          "wheel:history",
-          JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) })
-        );
+    if (gotLock) {
+      const lastRoundIdRaw = await redis.get("wheel:lastRoundId");
+      const lastRoundId = lastRoundIdRaw === null ? null : Number(lastRoundIdRaw);
+
+      if (lastRoundId === null) {
+        await rebuildHistoryToRound(roundId);
+      } else if (lastRoundId < roundId) {
+        for (let r = lastRoundId + 1; r <= roundId; r++) {
+          const w = winnerForRound(r);
+          await redis.lpush("wheel:history", JSON.stringify({ roundId: r, winnerIndex: w }));
+        }
+        await redis.ltrim("wheel:history", 0, HISTORY_MAX * 6); // чуть больше, чтобы было что чистить
+        await redis.set("wheel:lastRoundId", roundId);
       }
-      await redis.ltrim("wheel:history", 0, HISTORY_MAX - 1);
-      await redis.set("wheel:lastFinishedRoundId", finishedRoundId);
+      // lock сам протухнет по PX
     }
 
-    const raw = await redis.lrange("wheel:history", 0, HISTORY_MAX - 1);
-    const parsed = raw.map(safeParseHistoryItem).filter(Boolean);
+    // ---------- 2) ЧИТАЕМ историю и чистим дубли ----------
+    const raw = await redis.lrange("wheel:history", 0, HISTORY_MAX * 6);
+    const parsed = raw.map(safeParse).filter(Boolean);
 
-    if (parsed.length === 0 || parsed.length !== raw.length) {
-      await rebuildHistoryToFinishedRound(finishedRoundId);
+    // если мусор/пусто — пересоберём
+    if (parsed.length === 0) {
+      await rebuildHistoryToRound(roundId);
       const raw2 = await redis.lrange("wheel:history", 0, HISTORY_MAX - 1);
-      const hist2 = raw2.map(safeParseHistoryItem).filter(Boolean).reverse();
+      const parsed2 = raw2.map(safeParse).filter(Boolean).reverse();
       return res.status(200).json({
         serverNow: now,
         periodMs: PERIOD_MS,
-        round: {
-          roundId: currentRoundId,
-          startAt,
-          endAt,
-          winnerIndex: winnerForRound(currentRoundId),
-        },
-        history: hist2,
+        round: { roundId, startAt, endAt, winnerIndex: winnerForRound(roundId) },
+        history: parsed2,
         rebuilt: true,
+        deduped: false,
       });
     }
 
-    const history = parsed.reverse(); // старые->новые
+    // чистим дубли roundId
+    const unique = uniqByRoundId(parsed);
+
+    // если были дубли — перепишем список красиво (последние HISTORY_MAX раундов)
+    let deduped = false;
+    if (unique.length !== parsed.length) {
+      deduped = true;
+      const keep = unique.slice(-HISTORY_MAX);
+
+      await redis.del("wheel:history");
+      for (const item of keep) {
+        await redis.rpush("wheel:history", JSON.stringify(item));
+      }
+      // lastRoundId тоже обновим на самый новый
+      await redis.set("wheel:lastRoundId", keep[keep.length - 1].roundId);
+    }
+
+    // возвращаем ровно последние HISTORY_MAX, старые->новые
+    const history = unique.slice(-HISTORY_MAX);
 
     return res.status(200).json({
       serverNow: now,
       periodMs: PERIOD_MS,
-      round: {
-        roundId: currentRoundId,
-        startAt,
-        endAt,
-        winnerIndex: winnerForRound(currentRoundId),
-      },
+      round: { roundId, startAt, endAt, winnerIndex: winnerForRound(roundId) },
       history,
       rebuilt: false,
+      deduped,
     });
   } catch (e) {
     return res.status(500).json({ error: "state_error", message: String(e) });
