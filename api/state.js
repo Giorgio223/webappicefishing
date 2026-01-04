@@ -6,8 +6,7 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// ✅ теперь раунд 9 секунд
-const PERIOD_MS = 9000;
+const PERIOD_MS = 9000;   // ✅ 9 секунд
 const N = 53;
 const HISTORY_MAX = 18;
 
@@ -38,8 +37,10 @@ async function rebuildHistoryToFinishedRound(finishedRoundId) {
   await redis.del("wheel:history");
   const from = Math.max(0, finishedRoundId - (HISTORY_MAX - 1));
   for (let r = from; r <= finishedRoundId; r++) {
-    const w = winnerForRound(r);
-    await redis.rpush("wheel:history", JSON.stringify({ roundId: r, winnerIndex: w }));
+    await redis.rpush(
+      "wheel:history",
+      JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) })
+    );
   }
   await redis.set("wheel:lastFinishedRoundId", finishedRoundId);
 }
@@ -51,26 +52,30 @@ export default async function handler(req, res) {
 
     const now = Date.now();
 
-    // ✅ finishedRoundId = последний ЗАВЕРШЕННЫЙ раунд
-    // "-1" гарантирует, что на границе времени раунд не считается завершенным раньше времени.
-    const finishedRoundId = Math.floor((now - 1) / PERIOD_MS);
-
-    // ✅ currentRoundId = текущий активный раунд (который сейчас идёт)
-    const currentRoundId = finishedRoundId + 1;
+    // ✅ ПРАВИЛЬНО:
+    // currentRoundId = текущий активный раунд
+    // finishedRoundId = последний полностью завершённый
+    const currentRoundId = Math.floor(now / PERIOD_MS);
+    const finishedRoundId = currentRoundId - 1;
 
     const startAt = currentRoundId * PERIOD_MS;
     const endAt = startAt + PERIOD_MS;
 
-    // обновляем историю ТОЛЬКО до finishedRoundId
+    // обновляем историю только до finishedRoundId
     const lastFinishedRaw = await redis.get("wheel:lastFinishedRoundId");
     const lastFinished = lastFinishedRaw === null ? null : Number(lastFinishedRaw);
 
-    if (lastFinished === null) {
+    // ✅ если из-за прошлой ошибки lastFinished оказался "в будущем" — пересобираем
+    if (lastFinished !== null && lastFinished > finishedRoundId) {
+      await rebuildHistoryToFinishedRound(finishedRoundId);
+    } else if (lastFinished === null) {
       await rebuildHistoryToFinishedRound(finishedRoundId);
     } else if (lastFinished < finishedRoundId) {
       for (let r = lastFinished + 1; r <= finishedRoundId; r++) {
-        const w = winnerForRound(r);
-        await redis.lpush("wheel:history", JSON.stringify({ roundId: r, winnerIndex: w }));
+        await redis.lpush(
+          "wheel:history",
+          JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) })
+        );
       }
       await redis.ltrim("wheel:history", 0, HISTORY_MAX - 1);
       await redis.set("wheel:lastFinishedRoundId", finishedRoundId);
@@ -79,7 +84,6 @@ export default async function handler(req, res) {
     const raw = await redis.lrange("wheel:history", 0, HISTORY_MAX - 1);
     const parsed = raw.map(safeParseHistoryItem).filter(Boolean);
 
-    // если мусор в истории — восстановим
     if (parsed.length === 0 || parsed.length !== raw.length) {
       await rebuildHistoryToFinishedRound(finishedRoundId);
       const raw2 = await redis.lrange("wheel:history", 0, HISTORY_MAX - 1);
@@ -98,8 +102,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // raw новые->старые, делаем старые->новые
-    const history = parsed.reverse();
+    const history = parsed.reverse(); // старые->новые
 
     return res.status(200).json({
       serverNow: now,
