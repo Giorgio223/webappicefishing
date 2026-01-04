@@ -8,9 +8,9 @@
 
   <style>
     :root{
-      /* ✅ Leaf цвета как ты просил */
+      /* Leaf цвета */
       --leaf1:#e6e8ec;   /* почти белый, сероватый */
-      --leaf2:#334455;   /* тёмно-серый с голубым оттенком */
+      --leaf2:#3f5f78;   /* ✅ темный, но светлее и более голубой */
 
       --red:#e11d48;
       --orange:#fb923c;
@@ -91,18 +91,15 @@
     .tonBtn img{ width:22px; height:22px; display:block; border-radius:6px; }
     .tonBtn:active{ transform: translateY(1px); }
 
-    /* сцена */
-    .stage{
-      position:absolute; inset:0;
-      display:flex; flex-direction:column;
-      justify-content:center; align-items:center;
-      padding:18px; gap:10px;
-      z-index:3;
-    }
+    /* ✅ колесо теперь FIXED по центру, нижние панели его не двигают */
     .wheelWrap{
-      position:relative;
+      position:fixed;
+      left:50%;
+      top:50%;
+      transform: translate(-50%, -50%);
       width:min(430px, 92vw);
       height:min(430px, 92vw);
+      z-index:3;
       filter: drop-shadow(0 26px 44px rgba(0,0,0,.30));
     }
     canvas{ width:100%; height:100%; border-radius:50%; }
@@ -127,9 +124,22 @@
       opacity:.9;
     }
 
+    /* ✅ нижний блок закреплен снизу */
+    .bottomUI{
+      position:fixed;
+      left:50%;
+      bottom:14px;
+      transform:translateX(-50%);
+      width:min(430px, 92vw);
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      z-index:4;
+    }
+
     /* история */
     .historyBar{
-      width:min(430px, 92vw);
+      width:100%;
       display:flex; gap:6px;
       justify-content:center; align-items:center;
       padding:8px 10px;
@@ -163,13 +173,8 @@
     .chip.fish::before{ content:"🐟"; }
     .chip.leaf::before{ content:"🍃"; }
 
-    /* панель кнопок */
-    .bonusPanel{
-      width:min(430px, 92vw);
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-    }
+    /* кнопки */
+    .bonusPanel{ width:100%; display:flex; flex-direction:column; gap:10px; }
     .bonusTop, .bonusBottom{ display:flex; gap:8px; justify-content:space-between; }
 
     .btn{
@@ -188,14 +193,12 @@
       overflow:hidden;
     }
     .btn:active{ transform: translateY(1px); }
-
     .btn.small{ height:42px; flex:1 1 0; font-size:13px; }
     .btn.big{
       height:58px; flex:1 1 0; font-size:12px;
       text-transform:uppercase; letter-spacing:.4px;
       text-align:center; padding:0 10px;
     }
-
     .btnIcon{
       width:26px; height:26px;
       border-radius:999px;
@@ -206,7 +209,7 @@
     }
 
     /* Цвета кнопок */
-    .c-leaf1{ background: color-mix(in srgb, var(--leaf1) 84%, white 16%); color:#0b1220; }
+    .c-leaf1{ background: color-mix(in srgb, var(--leaf1) 86%, white 14%); color:#0b1220; }
     .c-leaf2{ background: color-mix(in srgb, var(--leaf2) 86%, white 14%); color:#fff; }
 
     .c-blue { background: color-mix(in srgb, var(--blue) 74%, white 26%); color:#fff; }
@@ -230,13 +233,13 @@
       color:#0b1220;
     }
 
-    /* ✅ панель выбора фишек под бонусами */
+    /* панель фишек + undo */
     .betRow{
       display:flex;
       justify-content:center;
       align-items:center;
       gap:10px;
-      margin-top:2px;
+      margin-top:0;
     }
     .undoBtn{
       width:44px;
@@ -256,11 +259,7 @@
       -webkit-tap-highlight-color: transparent;
     }
     .undoBtn:active{ transform: translateY(1px); }
-    .undoBtn[disabled]{
-      opacity:.55;
-      cursor:not-allowed;
-      transform:none;
-    }
+    .undoBtn[disabled]{ opacity:.55; cursor:not-allowed; transform:none; }
 
     .betSelect{
       position:relative;
@@ -286,16 +285,13 @@
       letter-spacing:.2px;
       margin-left:2px;
     }
-    .chev{
-      opacity:.75;
-      font-weight:950;
-      margin-left:6px;
-    }
+    .chev{ opacity:.75; font-weight:950; margin-left:6px; }
+
     .betMenu{
       position:absolute;
       left:50%;
       transform:translateX(-50%);
-      top:46px;
+      bottom:54px;
       min-width:240px;
       padding:10px;
       border-radius:16px;
@@ -342,12 +338,14 @@
     </div>
   </div>
 
-  <div class="stage">
-    <div class="wheelWrap">
-      <div class="pointer"></div>
-      <canvas id="wheel" width="900" height="900"></canvas>
-    </div>
+  <!-- ✅ колесо всегда по центру -->
+  <div class="wheelWrap">
+    <div class="pointer"></div>
+    <canvas id="wheel" width="900" height="900"></canvas>
+  </div>
 
+  <!-- ✅ UI закреплен снизу -->
+  <div class="bottomUI">
     <div class="historyBar" id="historyBar"></div>
 
     <div class="bonusPanel">
@@ -377,7 +375,6 @@
         </div>
       </div>
 
-      <!-- ✅ ПАНЕЛЬ ФИШЕК ПОД БОНУСАМИ + UNDO -->
       <div class="betRow">
         <button class="undoBtn" id="undoBtn" title="Undo last bet" disabled>↩</button>
 
@@ -429,36 +426,26 @@
     }
   })();
 
-  // ---------- BET SELECT + UNDO ----------
+  // --- BETS + UNDO ---
   let currentBet = 0.2;
-
   const betSelect = document.getElementById("betSelect");
   const betMenu = document.getElementById("betMenu");
   const betValue = document.getElementById("betValue");
   const undoBtn = document.getElementById("undoBtn");
 
-  // target -> totalBet
-  const totals = new Map();
-  // stack of actions: { target, amount }
-  const actions = [];
+  const totals = new Map();     // target -> total
+  const actions = [];           // stack {target, amount}
 
   function fmt(x){
-    // аккуратный формат: 0.1/0.2/0.5/1/1.2/2.3
     const s = (Math.round(x*10)/10).toFixed(1);
     return s.endsWith(".0") ? s.slice(0,-2) : s;
   }
-
-  function updateUndoState(){
-    undoBtn.disabled = actions.length === 0;
-  }
+  function updateUndoState(){ undoBtn.disabled = actions.length === 0; }
 
   function closeBetMenu(){ betMenu.classList.remove("open"); }
   function toggleBetMenu(){ betMenu.classList.toggle("open"); }
 
-  betSelect.addEventListener("click", (e) => {
-    e.stopPropagation();
-    toggleBetMenu();
-  });
+  betSelect.addEventListener("click", (e) => { e.stopPropagation(); toggleBetMenu(); });
 
   betMenu.querySelectorAll(".betChip").forEach(chip => {
     chip.addEventListener("click", (e) => {
@@ -471,12 +458,11 @@
 
   document.addEventListener("click", () => closeBetMenu());
 
-  // ставим сумму на кнопке
   function renderTotalOnButton(target){
     const btn = document.querySelector(`.bettable[data-target="${target}"]`);
     if (!btn) return;
-
     const total = totals.get(target) || 0;
+
     const old = btn.querySelector(".placedBet");
     if (old) old.remove();
 
@@ -492,7 +478,6 @@
     const prev = totals.get(target) || 0;
     const next = Math.round((prev + amount) * 10) / 10;
     totals.set(target, next);
-
     actions.push({ target, amount });
     renderTotalOnButton(target);
     updateUndoState();
@@ -505,26 +490,20 @@
     const next = Math.round((prev - last.amount) * 10) / 10;
     if (next <= 0) totals.delete(last.target);
     else totals.set(last.target, next);
-
     renderTotalOnButton(last.target);
     updateUndoState();
   }
 
-  undoBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    undoLast();
-  });
+  undoBtn.addEventListener("click", (e) => { e.stopPropagation(); undoLast(); });
 
-  // клик по кнопкам — добавляет ставку (суммируется)
   document.querySelectorAll(".bettable").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const target = btn.dataset.target;
-      addBet(target, currentBet);
+      addBet(btn.dataset.target, currentBet);
     });
   });
 
-  // ---------- WHEEL ----------
+  // --- WHEEL ---
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -732,7 +711,6 @@
         ctx.rotate(Math.PI/2);
         drawVerticalChars(sec.label, 0, 82, sec.text);
       } else {
-        // лист на светлом leaf1 должен быть чуть темнее
         const stroke = (sec.kind === "leaf1") ? "rgba(17,24,39,0.65)" : "rgba(255,255,255,0.82)";
         drawLeafIcon(0, 0, 0.9, stroke);
       }
@@ -788,7 +766,6 @@
     const winnerIdx = pickWinnerIndex();
     const pointerWorld = -Math.PI/2;
     const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
-
     const target = (pointerWorld - winnerCenter) - SPIN_TURNS * Math.PI * 2;
 
     const start = angle;
@@ -850,7 +827,7 @@
     }, 1000);
   }
 
-  // История
+  // история
   const historyBar = document.getElementById("historyBar");
   const history = [];
   const HISTORY_MAX = 18;
@@ -871,11 +848,37 @@
     }
   }
 
-  // старт
+  // bet menu + undo state init
+  updateUndoState();
   drawWheel(null);
   renderHistory();
-  updateUndoState();
   startCountdown();
+
+  // ---- bet menu handlers (после init, чтобы функции существовали) ----
+  function closeBetMenu(){ betMenu.classList.remove("open"); }
+  function toggleBetMenu(){ betMenu.classList.toggle("open"); }
+  betSelect.addEventListener("click", (e) => { e.stopPropagation(); toggleBetMenu(); });
+  betMenu.querySelectorAll(".betChip").forEach(chip => {
+    chip.addEventListener("click", (e) => {
+      e.stopPropagation();
+      currentBet = Number(chip.dataset.bet);
+      betValue.textContent = fmt(currentBet);
+      closeBetMenu();
+    });
+  });
+  document.addEventListener("click", () => closeBetMenu());
+
+</script>
+
+<script>
+  // отдельный блок, чтобы переменные DOM были доступны
+  // (это безопасно, браузер уже построил DOM выше)
+</script>
+
+<script>
+  // DOM refs для bet menu (после загрузки)
+  var betSelect = document.getElementById("betSelect");
+  var betMenu   = document.getElementById("betMenu");
 </script>
 </body>
 </html>
