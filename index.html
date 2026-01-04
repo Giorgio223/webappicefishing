@@ -203,7 +203,7 @@
     .c-leaf2{ background: color-mix(in srgb, var(--leaf2) 86%, white 14%); color:#fff; }
 
     .c-blue { background: color-mix(in srgb, var(--blue) 74%, white 26%); color:#fff; }
-    .c-orange{ background: color-mix(in srgb, var(--orange) 74%, white 26%); color:#1b1bb; }
+    .c-orange{ background: color-mix(in srgb, var(--orange) 74%, white 26%); color:#1b1b1b; }
     .c-red { background: color-mix(in srgb, var(--red) 74%, white 26%); color:#fff; }
 
     .placedBet{
@@ -478,6 +478,7 @@
     </div>
   </div>
 
+  <!-- TonConnect UI -->
   <script type="module">
     try{
       const mod = await import("https://esm.sh/@tonconnect/ui@2.0.10");
@@ -509,7 +510,7 @@
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
 
-  // снег
+  // snow
   (function initSnow(){
     const box = document.getElementById("snow");
     const flakes = 26;
@@ -618,7 +619,7 @@
     btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
 
-  // --- WHEEL SETUP ---
+  // --- WHEEL ---
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -817,7 +818,8 @@
       if (sec.icon === "fish"){
         drawFishIcon(0, 0, 1.05, "rgba(255,255,255,0.92)");
         ctx.rotate(Math.PI/2);
-        drawVerticalChars(sec.label, 0, 82, sec.text);
+        // вертикальный текст ПОНИЖЕ, чтобы не перекрывать рыбку
+        drawVerticalChars(sec.label, 0, 92, sec.text);
       } else {
         const stroke = (sec.kind === "leaf1") ? "rgba(17,24,39,0.65)" : "rgba(255,255,255,0.82)";
         drawLeafIcon(0, 0, 0.9, stroke);
@@ -900,9 +902,7 @@
     }
   }
 
-  // ==========================
-  // LIVE SYNC (server history already completed)
-  // ==========================
+  // LIVE SYNC (фикс обновления истории)
   let timeOffset = 0;
   let currentRoundId = null;
   let scheduledForRoundId = null;
@@ -926,14 +926,20 @@
   }
 
   function applyHistoryFromServer(state){
-    // ✅ сервер уже отдаёт только completed history — показываем как есть
-    const list = (state.history || []).slice(-HISTORY_MAX);
+    const list = (state.history || []).slice();
+
+    // ✅ гарантируем порядок: старые -> новые
+    list.sort((a,b) => a.roundId - b.roundId);
+
+    const last = list.slice(-HISTORY_MAX);
 
     history.length = 0;
-    for (const item of list) history.push(item.winnerIndex);
+    for (const item of last) history.push(item.winnerIndex);
 
     renderHistory();
-    lastAppliedHistoryRoundId = list.length ? list[list.length - 1].roundId : null;
+
+    // ✅ фикс: запоминаем самый новый roundId
+    lastAppliedHistoryRoundId = last.length ? last[last.length - 1].roundId : null;
   }
 
   function scheduleSpinAtEnd(endAt, winnerIndex, roundId){
@@ -976,9 +982,16 @@
       const state = await fetchState();
       timeOffset = state.serverNow - Date.now();
 
-      // history update only when last history round changes
-      const lastHistRoundId = state.history?.length ? state.history[state.history.length - 1].roundId : null;
-      if (lastAppliedHistoryRoundId !== lastHistRoundId){
+      // ✅ берём MAX roundId из history (не зависит от порядка)
+      const list = state.history || [];
+      let maxRoundId = null;
+      for (const h of list){
+        if (typeof h?.roundId === "number"){
+          if (maxRoundId === null || h.roundId > maxRoundId) maxRoundId = h.roundId;
+        }
+      }
+
+      if (lastAppliedHistoryRoundId !== maxRoundId){
         applyHistoryFromServer(state);
       }
 
@@ -993,7 +1006,6 @@
   }
 
   // init
-  function updateUndoState(){ document.getElementById("undoBtn").disabled = actions.length === 0; }
   drawWheel(null);
   renderHistory();
   syncLoop();
