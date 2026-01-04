@@ -8,9 +8,9 @@
 
   <style>
     :root{
-      /* Цвета сегментов */
-      --leaf1:#1677ff;   /* яркий синий */
-      --leaf2:#7fe3ff;   /* яркий голубой */
+      /* Сегменты */
+      --leaf1:#1aa7ff;   /* голубая (ярче) */
+      --leaf2:#0f5fe6;   /* темно-голубая */
       --red:#e11d48;
       --orange:#fb923c;
       --blue:#0b2a8f;    /* LIL BLUES темнее */
@@ -26,14 +26,13 @@
       font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
       overflow:hidden;
 
-      /* ✅ ФОН ИЗ ФАЙЛА bg.png */
       background:
         radial-gradient(900px 600px at 25% 15%, rgba(255,255,255,.25), rgba(255,255,255,0) 60%),
         radial-gradient(1200px 900px at 70% 35%, rgba(255,255,255,.18), rgba(255,255,255,0) 65%),
         url("bg.png") center/cover no-repeat fixed;
     }
 
-    /* ✅ Снег поверх (дополнительный, красивый) */
+    /* Снег */
     .snow {
       pointer-events:none;
       position:fixed;
@@ -144,7 +143,7 @@
       opacity:.9;
     }
 
-    /* История снизу */
+    /* История */
     .historyBar{
       width:min(430px, 92vw);
       display:flex;
@@ -186,14 +185,80 @@
       display:flex; align-items:center; justify-content:center;
       font-size:11px;
     }
+
+    /* Панель кнопок */
+    .bonusPanel{
+      width:min(430px, 92vw);
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .bonusTop{
+      display:flex;
+      gap:8px;
+      justify-content:space-between;
+    }
+    .bonusBottom{
+      display:flex;
+      gap:8px;
+      justify-content:space-between;
+    }
+
+    .btn{
+      border:1px solid rgba(0,0,0,.12);
+      background: rgba(255,255,255,.55);
+      border-radius:16px;
+      box-shadow: 0 12px 26px rgba(0,0,0,.16);
+      backdrop-filter: blur(6px);
+      user-select:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      font-weight:950;
+      color:#0b1220;
+    }
+
+    .btn.small{
+      height:42px;
+      flex:1 1 0;
+      font-size:13px;
+    }
+    .btn.big{
+      height:58px;
+      flex:1 1 0;
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.4px;
+      text-align:center;
+      padding:0 10px;
+    }
+
+    .btnIcon{
+      width:26px;
+      height:26px;
+      border-radius:999px;
+      background: rgba(255,255,255,.45);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:16px;
+      border:1px solid rgba(0,0,0,.10);
+    }
+
+    /* Цвета кнопок */
+    .c-leaf1{ background: color-mix(in srgb, var(--leaf1) 70%, white 30%); }
+    .c-leaf2{ background: color-mix(in srgb, var(--leaf2) 70%, white 30%); }
+
+    .c-blue { background: color-mix(in srgb, var(--blue) 72%, white 28%); color:#fff; }
+    .c-orange{ background: color-mix(in srgb, var(--orange) 72%, white 28%); color:#1b1b1b; }
+    .c-red { background: color-mix(in srgb, var(--red) 72%, white 28%); color:#fff; }
   </style>
 </head>
 
 <body>
-  <!-- снег -->
   <div class="snow" id="snow"></div>
 
-  <!-- HUD -->
   <div class="leftHUD">
     <div class="cube"></div>
     <div class="hudText">
@@ -202,23 +267,52 @@
     </div>
   </div>
 
-  <!-- колесо -->
   <div class="stage">
     <div class="wheelWrap">
       <div class="pointer"></div>
       <canvas id="wheel" width="900" height="900"></canvas>
     </div>
+
     <div class="historyBar" id="historyBar"></div>
+
+    <!-- ✅ Кнопки под историей -->
+    <div class="bonusPanel">
+      <div class="bonusTop">
+        <div class="btn small c-leaf1">
+          <span class="btnIcon">🍃</span>
+          Leaf 1
+        </div>
+        <div class="btn small c-leaf2">
+          <span class="btnIcon">🍃</span>
+          Leaf 2
+        </div>
+      </div>
+
+      <div class="bonusBottom">
+        <div class="btn big c-blue">
+          <span class="btnIcon">🐟</span>
+          Lil Blues Bonus
+        </div>
+        <div class="btn big c-orange">
+          <span class="btnIcon">🐟</span>
+          Big Oranges Bonus
+        </div>
+        <div class="btn big c-red">
+          <span class="btnIcon">🐟</span>
+          Huge Reds Bonus
+        </div>
+      </div>
+    </div>
   </div>
 
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
 
-  // ---------- СНЕГ (лёгкий) ----------
+  // ---------- СНЕГ ----------
   (function initSnow(){
     const box = document.getElementById("snow");
-    const flakes = 26; // не перегружаем
+    const flakes = 26;
     for (let i=0;i<flakes;i++){
       const s = document.createElement("span");
       const size = 2 + Math.random()*4;
@@ -235,12 +329,11 @@
     }
   })();
 
-  // ---------- КОЛЕСО 53 ----------
+  // ---------- КОЛЕСО ----------
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
 
-  // Позиции “как по часам”
   const IDX_HUGE = 0;
   const IDX_ORANGES = [13, 39];
   const IDX_BLUES   = [7, 20, 33, 46];
@@ -259,7 +352,6 @@
   for (const i of IDX_ORANGES) sectors[i] = { kind:"orange", label:"BIG ORANGES", fill:COLORS.orange, text:"#1b1b1b", icon:"fish" };
   for (const i of IDX_BLUES)   sectors[i] = { kind:"blue", label:"LIL BLUES", fill:COLORS.blue, text:"#fff", icon:"fish" };
 
-  // 46 leaf: 23/23 alternating
   let leaf1Left = 23, leaf2Left = 23;
   let toggle = 0;
   for (let i=0;i<N;i++){
@@ -305,7 +397,6 @@
     return Math.floor(rel / step);
   }
 
-  // Крипто-рандом
   function rand01(){
     if (window.crypto?.getRandomValues){
       const u = new Uint32Array(1);
@@ -315,7 +406,6 @@
     return Math.random();
   }
 
-  // Иконки
   function drawFishIcon(x,y,scale,fill){
     ctx.save();
     ctx.translate(x,y);
@@ -365,18 +455,17 @@
     ctx.restore();
   }
 
-  // Вертикальный текст: меньше и ниже, начинается после рыбки
+  // ✅ Текст ещё ниже, чтобы точно НЕ перекрывал рыбку
   function drawVerticalChars(text, x, y, fill){
     const t = text.replace(/'/g,"").replace(/\s+/g," ").trim();
-
     ctx.save();
     ctx.translate(x,y);
     ctx.fillStyle = fill;
-    ctx.font = "900 14px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.font = "900 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    const lineH = 12;
+    const lineH = 11;
     const maxLen = 10;
     const s = t.slice(0, maxLen);
     const totalH = (s.length-1)*lineH;
@@ -390,7 +479,7 @@
   function drawWheel(highlightIdx=null){
     ctx.clearRect(0,0,W,H);
 
-    // серо-голубой лёд внутри колеса
+    // лёгкий лед в центре колеса
     ctx.save();
     const ice = ctx.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
     ice.addColorStop(0, "rgba(255,255,255,0.96)");
@@ -442,8 +531,6 @@
       ctx.stroke();
 
       const mid = (a0+a1)/2;
-
-      // Иконка ближе к внешнему краю
       const iconR = outerR*0.82;
 
       ctx.save();
@@ -453,9 +540,9 @@
       if (sec.icon === "fish"){
         drawFishIcon(0, 0, 1.05, "rgba(255,255,255,0.92)");
 
-        // Текст еще НИЖЕ: было 28/52, ставим 62 чтобы точно не налезал
+        // ✅ ещё ниже: было 62, делаем 82
         ctx.rotate(Math.PI/2);
-        drawVerticalChars(sec.label, 0, 62, sec.text);
+        drawVerticalChars(sec.label, 0, 82, sec.text);
       } else {
         drawLeafIcon(0, 0, 0.9, "rgba(255,255,255,0.82)");
       }
@@ -513,12 +600,12 @@
     ctx.restore();
   }
 
-  // ---------- СПИН: одинаковая сила, потом стоп, потом 6 сек ----------
+  // ---------- СПИН (ВСЕ ОДИНАКОВЫЕ) ----------
+  // ✅ без jitter, без “разной силы”, одинаковое время, одинаковые обороты
   function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
 
   const SPIN_TURNS = 9;
   const SPIN_MS = 4200;
-  const JITTER = 0.20;
 
   function pickWinnerIndex(){
     return Math.floor(rand01() * N);
@@ -535,8 +622,8 @@
     const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
     let target = pointerWorld - winnerCenter;
 
-    const jitter = (rand01() - 0.5) * step * JITTER;
-    target = target + jitter - SPIN_TURNS * Math.PI * 2;
+    // ✅ фиксированное число оборотов, без смещения
+    target = target - SPIN_TURNS * Math.PI * 2;
 
     const start = angle;
     const end = target;
@@ -556,7 +643,7 @@
       requestAnimationFrame(frame);
     });
 
-    // ✅ фиксируем, добавляем историю, и ТОЛЬКО ПОТОМ стартуем новый 6-сек цикл
+    // фиксируем
     const finalIdx = indexAtPointer(angle);
     addHistory(finalIdx);
 
@@ -564,7 +651,8 @@
     setHUDSpinning(false);
     drawWheel(null);
 
-    startCountdown(); // новый отсчет только после фиксации
+    // ✅ новый таймер только после фиксации
+    startCountdown();
   }
 
   // ---------- HUD цикл ----------
