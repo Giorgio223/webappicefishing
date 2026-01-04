@@ -6,10 +6,11 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-const PERIOD_MS = 10000;
+const PERIOD_MS = 10000; // ✅ 10 секунд
 const N = 53;
 const HISTORY_MAX = 18;
 
+// winner детерминированный (одинаково у всех 24/7)
 function winnerForRound(roundId) {
   const seed = process.env.WHEEL_SEED || "dev-seed";
   const h = crypto.createHmac("sha256", seed).update(String(roundId)).digest();
@@ -32,21 +33,21 @@ function safeParse(item) {
   return null;
 }
 
-async function rebuildHistoryToRound(roundId) {
+// пересобираем историю так, чтобы она была по завершённым раундам
+async function rebuildHistoryToRound(lastCompletedRoundId) {
   await redis.del("wheel:history");
-  const from = Math.max(0, roundId - (HISTORY_MAX - 1));
-  for (let r = from; r <= roundId; r++) {
+  const from = Math.max(0, lastCompletedRoundId - (HISTORY_MAX - 1));
+  for (let r = from; r <= lastCompletedRoundId; r++) {
     const w = winnerForRound(r);
     await redis.rpush("wheel:history", JSON.stringify({ roundId: r, winnerIndex: w }));
   }
-  await redis.set("wheel:lastRoundId", roundId);
+  await redis.set("wheel:lastRoundId", lastCompletedRoundId);
 }
 
 function uniqByRoundId(arr) {
-  // оставляем только последний элемент для каждого roundId
   const map = new Map();
   for (const x of arr) map.set(x.roundId, x);
-  return Array.from(map.values()).sort((a,b)=>a.roundId-b.roundId);
+  return Array.from(map.values()).sort((a, b) => a.roundId - b.roundId);
 }
 
 export default async function handler(req, res) {
@@ -55,55 +56,65 @@ export default async function handler(req, res) {
     res.setHeader("Content-Type", "application/json");
 
     const now = Date.now();
+
+    // текущий активный раунд
     const roundId = Math.floor(now / PERIOD_MS);
     const startAt = roundId * PERIOD_MS;
     const endAt = startAt + PERIOD_MS;
 
-    // ---------- 1) LOCK на обновление истории ----------
-    // если параллельно пришли 2 запроса — только один сможет обновить историю
-    const lockKey = `wheel:lock:${roundId}`;
-    const gotLock = await redis.set(lockKey, "1", { nx: true, px: 4500 }); // держим ~4.5 сек
+    // ✅ завершённый раунд = текущий - 1
+    const lastCompletedRoundId = Math.max(0, roundId - 1);
+
+    // ---------- 1) LOCK: обновляем историю только одним запросом ----------
+    // lock на "завершённый раунд", чтобы не было дублей
+    const lockKey = `wheel:lock:${lastCompletedRoundId}`;
+    const gotLock = await redis.set(lockKey, "1", { nx: true, px: 7000 }); // < 10с
 
     if (gotLock) {
       const lastRoundIdRaw = await redis.get("wheel:lastRoundId");
       const lastRoundId = lastRoundIdRaw === null ? null : Number(lastRoundIdRaw);
 
       if (lastRoundId === null) {
-        await rebuildHistoryToRound(roundId);
-      } else if (lastRoundId < roundId) {
-        for (let r = lastRoundId + 1; r <= roundId; r++) {
+        // если истории нет — создадим по последним completed
+        await rebuildHistoryToRound(lastCompletedRoundId);
+      } else if (lastRoundId < lastCompletedRoundId) {
+        // ✅ добавляем только завершённые раунды (до lastCompletedRoundId)
+        for (let r = lastRoundId + 1; r <= lastCompletedRoundId; r++) {
           const w = winnerForRound(r);
           await redis.lpush("wheel:history", JSON.stringify({ roundId: r, winnerIndex: w }));
         }
-        await redis.ltrim("wheel:history", 0, HISTORY_MAX * 6); // чуть больше, чтобы было что чистить
-        await redis.set("wheel:lastRoundId", roundId);
+        // оставим запас для дедупа
+        await redis.ltrim("wheel:history", 0, HISTORY_MAX * 6);
+        await redis.set("wheel:lastRoundId", lastCompletedRoundId);
       }
-      // lock сам протухнет по PX
     }
 
-    // ---------- 2) ЧИТАЕМ историю и чистим дубли ----------
+    // ---------- 2) читаем историю и чистим дубли ----------
     const raw = await redis.lrange("wheel:history", 0, HISTORY_MAX * 6);
     const parsed = raw.map(safeParse).filter(Boolean);
 
-    // если мусор/пусто — пересоберём
     if (parsed.length === 0) {
-      await rebuildHistoryToRound(roundId);
+      await rebuildHistoryToRound(lastCompletedRoundId);
       const raw2 = await redis.lrange("wheel:history", 0, HISTORY_MAX - 1);
-      const parsed2 = raw2.map(safeParse).filter(Boolean).reverse();
+      const parsed2 = raw2.map(safeParse).filter(Boolean);
+      const history2 = uniqByRoundId(parsed2).slice(-HISTORY_MAX);
       return res.status(200).json({
         serverNow: now,
         periodMs: PERIOD_MS,
-        round: { roundId, startAt, endAt, winnerIndex: winnerForRound(roundId) },
-        history: parsed2,
+        round: {
+          roundId,
+          startAt,
+          endAt,
+          winnerIndex: winnerForRound(roundId), // winner текущего (для спина)
+        },
+        history: history2, // ✅ только завершённые
         rebuilt: true,
         deduped: false,
       });
     }
 
-    // чистим дубли roundId
     const unique = uniqByRoundId(parsed);
 
-    // если были дубли — перепишем список красиво (последние HISTORY_MAX раундов)
     let deduped = false;
     if (unique.length !== parsed.length) {
       deduped = true;
@@ -113,17 +124,21 @@ export default async function handler(req, res) {
       for (const item of keep) {
         await redis.rpush("wheel:history", JSON.stringify(item));
       }
-      // lastRoundId тоже обновим на самый новый
       await redis.set("wheel:lastRoundId", keep[keep.length - 1].roundId);
     }
 
-    // возвращаем ровно последние HISTORY_MAX, старые->новые
+    // ✅ в ответе история только завершённых (и по порядку)
     const history = unique.slice(-HISTORY_MAX);
 
     return res.status(200).json({
       serverNow: now,
       periodMs: PERIOD_MS,
-      round: { roundId, startAt, endAt, winnerIndex: winnerForRound(roundId) },
+      round: {
+        roundId,
+        startAt,
+        endAt,
+        winnerIndex: winnerForRound(roundId), // winner текущего (он крутится на endAt)
+      },
       history,
       rebuilt: false,
       deduped,
