@@ -9,8 +9,8 @@
   <style>
     :root{
       /* Сегменты */
-      --leaf1:#1aa7ff;   /* голубая (ярче) */
-      --leaf2:#0f5fe6;   /* темно-голубая */
+      --leaf1:#9aa7b5;   /* ✅ серо-голубой (ближе к серому) */
+      --leaf2:#6b86a3;   /* ✅ темнее серо-голубой */
       --red:#e11d48;
       --orange:#fb923c;
       --blue:#0b2a8f;    /* LIL BLUES темнее */
@@ -61,7 +61,7 @@
       position:fixed;
       left:12px; top:14px;
       display:flex; align-items:center; gap:10px;
-      z-index:5;
+      z-index:6;
       user-select:none;
       pointer-events:none;
     }
@@ -87,6 +87,7 @@
       color:#0b1220;
       line-height:1;
       min-width:160px;
+     _toggle:uppercase;
       text-transform:uppercase;
       text-shadow: 0 6px 18px rgba(0,0,0,.12);
     }
@@ -97,6 +98,39 @@
       letter-spacing:.2px;
       margin-top:3px;
       font-size:11px;
+    }
+
+    /* ✅ TON connect кнопка справа сверху */
+    .tonBtn{
+      position:fixed;
+      right:12px;
+      top:14px;
+      z-index:6;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(0,0,0,.12);
+      background: rgba(255,255,255,.60);
+      box-shadow: 0 12px 26px rgba(0,0,0,.16);
+      backdrop-filter: blur(6px);
+      cursor:pointer;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      text-decoration:none;
+      color:#0b1220;
+      font-weight:950;
+      letter-spacing:.2px;
+    }
+    .tonBtn img{
+      width:22px;
+      height:22px;
+      display:block;
+      border-radius:6px;
+    }
+    .tonBtn:active{
+      transform: translateY(1px);
     }
 
     /* сцена */
@@ -247,17 +281,23 @@
     }
 
     /* Цвета кнопок */
-    .c-leaf1{ background: color-mix(in srgb, var(--leaf1) 70%, white 30%); }
-    .c-leaf2{ background: color-mix(in srgb, var(--leaf2) 70%, white 30%); }
+    .c-leaf1{ background: color-mix(in srgb, var(--leaf1) 72%, white 28%); }
+    .c-leaf2{ background: color-mix(in srgb, var(--leaf2) 72%, white 28%); }
 
-    .c-blue { background: color-mix(in srgb, var(--blue) 72%, white 28%); color:#fff; }
-    .c-orange{ background: color-mix(in srgb, var(--orange) 72%, white 28%); color:#1b1b1b; }
-    .c-red { background: color-mix(in srgb, var(--red) 72%, white 28%); color:#fff; }
+    .c-blue { background: color-mix(in srgb, var(--blue) 74%, white 26%); color:#fff; }
+    .c-orange{ background: color-mix(in srgb, var(--orange) 74%, white 26%); color:#1b1b1b; }
+    .c-red { background: color-mix(in srgb, var(--red) 74%, white 26%); color:#fff; }
   </style>
 </head>
 
 <body>
   <div class="snow" id="snow"></div>
+
+  <!-- ✅ TON connect -->
+  <a class="tonBtn" href="javascript:void(0)" id="tonConnectBtn">
+    <img src="ton.png" alt="TON" />
+    TON connect
+  </a>
 
   <div class="leftHUD">
     <div class="cube"></div>
@@ -275,7 +315,6 @@
 
     <div class="historyBar" id="historyBar"></div>
 
-    <!-- ✅ Кнопки под историей -->
     <div class="bonusPanel">
       <div class="bonusTop">
         <div class="btn small c-leaf1">
@@ -308,6 +347,12 @@
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
+
+  // TON connect (пока просто заглушка)
+  document.getElementById("tonConnectBtn").addEventListener("click", () => {
+    // позже подключим TonConnect SDK — сейчас просто уведомление
+    tg?.showPopup?.({ title: "TON", message: "TON Connect скоро будет подключен.", buttons: [{type:"ok"}] });
+  });
 
   // ---------- СНЕГ ----------
   (function initSnow(){
@@ -377,7 +422,7 @@
 
   // ---------- CANVAS ----------
   const canvas = document.getElementById("wheel");
-  const ctx = canvas.getContext("2d");
+  const ctx2d = canvas.getContext("2d");
   const W = canvas.width, H = canvas.height;
   const cx = W/2, cy = H/2;
 
@@ -407,63 +452,62 @@
   }
 
   function drawFishIcon(x,y,scale,fill){
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.scale(scale, scale);
-    ctx.fillStyle = fill;
+    ctx2d.save();
+    ctx2d.translate(x,y);
+    ctx2d.scale(scale, scale);
+    ctx2d.fillStyle = fill;
 
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 14, 9, 0, 0, Math.PI*2);
-    ctx.fill();
+    ctx2d.beginPath();
+    ctx2d.ellipse(0, 0, 14, 9, 0, 0, Math.PI*2);
+    ctx2d.fill();
 
-    ctx.beginPath();
-    ctx.moveTo(-14, 0);
-    ctx.lineTo(-26, -10);
-    ctx.lineTo(-26, 10);
-    ctx.closePath();
-    ctx.fill();
+    ctx2d.beginPath();
+    ctx2d.moveTo(-14, 0);
+    ctx2d.lineTo(-26, -10);
+    ctx2d.lineTo(-26, 10);
+    ctx2d.closePath();
+    ctx2d.fill();
 
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
-    ctx.beginPath();
-    ctx.arc(8, -2, 2.2, 0, Math.PI*2);
-    ctx.fill();
-    ctx.restore();
+    ctx2d.fillStyle = "rgba(255,255,255,0.92)";
+    ctx2d.beginPath();
+    ctx2d.arc(8, -2, 2.2, 0, Math.PI*2);
+    ctx2d.fill();
+    ctx2d.restore();
   }
 
   function drawLeafIcon(x,y,scale,stroke){
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.scale(scale, scale);
+    ctx2d.save();
+    ctx2d.translate(x,y);
+    ctx2d.scale(scale, scale);
 
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = 2.6;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
+    ctx2d.strokeStyle = stroke;
+    ctx2d.lineWidth = 2.6;
+    ctx2d.lineCap = "round";
+    ctx2d.lineJoin = "round";
 
-    ctx.beginPath();
-    ctx.moveTo(0, 12);
-    ctx.quadraticCurveTo(18, 2, 0, -14);
-    ctx.quadraticCurveTo(-18, 2, 0, 12);
-    ctx.closePath();
-    ctx.stroke();
+    ctx2d.beginPath();
+    ctx2d.moveTo(0, 12);
+    ctx2d.quadraticCurveTo(18, 2, 0, -14);
+    ctx2d.quadraticCurveTo(-18, 2, 0, 12);
+    ctx2d.closePath();
+    ctx2d.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(0, 10);
-    ctx.lineTo(0, -12);
-    ctx.stroke();
+    ctx2d.beginPath();
+    ctx2d.moveTo(0, 10);
+    ctx2d.lineTo(0, -12);
+    ctx2d.stroke();
 
-    ctx.restore();
+    ctx2d.restore();
   }
 
-  // ✅ Текст ещё ниже, чтобы точно НЕ перекрывал рыбку
   function drawVerticalChars(text, x, y, fill){
     const t = text.replace(/'/g,"").replace(/\s+/g," ").trim();
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.fillStyle = fill;
-    ctx.font = "900 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
+    ctx2d.save();
+    ctx2d.translate(x,y);
+    ctx2d.fillStyle = fill;
+    ctx2d.font = "900 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx2d.textAlign = "center";
+    ctx2d.textBaseline = "middle";
 
     const lineH = 11;
     const maxLen = 10;
@@ -471,41 +515,41 @@
     const totalH = (s.length-1)*lineH;
 
     for (let i=0;i<s.length;i++){
-      ctx.fillText(s[i], 0, -totalH/2 + i*lineH);
+      ctx2d.fillText(s[i], 0, -totalH/2 + i*lineH);
     }
-    ctx.restore();
+    ctx2d.restore();
   }
 
   function drawWheel(highlightIdx=null){
-    ctx.clearRect(0,0,W,H);
+    ctx2d.clearRect(0,0,W,H);
 
-    // лёгкий лед в центре колеса
-    ctx.save();
-    const ice = ctx.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
+    // лёд в центре
+    ctx2d.save();
+    const ice = ctx2d.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
     ice.addColorStop(0, "rgba(255,255,255,0.96)");
     ice.addColorStop(0.55, "rgba(222,236,247,0.98)");
     ice.addColorStop(1, "rgba(184,205,224,0.96)");
-    ctx.fillStyle = ice;
-    ctx.beginPath();
-    ctx.arc(cx,cy,outerR*1.05,0,Math.PI*2);
-    ctx.fill();
-    ctx.restore();
+    ctx2d.fillStyle = ice;
+    ctx2d.beginPath();
+    ctx2d.arc(cx,cy,outerR*1.05,0,Math.PI*2);
+    ctx2d.fill();
+    ctx2d.restore();
 
     // обод
-    ctx.save();
-    const rimGrad = ctx.createRadialGradient(cx,cy,outerR*0.92, cx,cy,outerR*1.06);
+    ctx2d.save();
+    const rimGrad = ctx2d.createRadialGradient(cx,cy,outerR*0.92, cx,cy,outerR*1.06);
     rimGrad.addColorStop(0, "rgba(18,27,47,0.95)");
     rimGrad.addColorStop(1, "rgba(7,10,18,0.98)");
-    ctx.strokeStyle = rimGrad;
-    ctx.lineWidth = outerR*0.10;
-    ctx.beginPath();
-    ctx.arc(cx,cy,outerR*1.02,0,Math.PI*2);
-    ctx.stroke();
-    ctx.restore();
+    ctx2d.strokeStyle = rimGrad;
+    ctx2d.lineWidth = outerR*0.10;
+    ctx2d.beginPath();
+    ctx2d.arc(cx,cy,outerR*1.02,0,Math.PI*2);
+    ctx2d.stroke();
+    ctx2d.restore();
 
-    ctx.save();
-    ctx.translate(cx,cy);
-    ctx.rotate(angle);
+    ctx2d.save();
+    ctx2d.translate(cx,cy);
+    ctx2d.rotate(angle);
 
     for (let i=0;i<N;i++){
       const a0 = i*step + startOffset;
@@ -513,103 +557,80 @@
       const sec = sectors[i];
       const isHi = (highlightIdx===i);
 
-      ctx.beginPath();
-      ctx.moveTo(0,0);
-      ctx.arc(0,0, outerR*0.90, a0, a1);
-      ctx.closePath();
+      ctx2d.beginPath();
+      ctx2d.moveTo(0,0);
+      ctx2d.arc(0,0, outerR*0.90, a0, a1);
+      ctx2d.closePath();
 
-      ctx.fillStyle = sec.fill;
-      ctx.fill();
+      ctx2d.fillStyle = sec.fill;
+      ctx2d.fill();
 
       if (isHi){
-        ctx.fillStyle = "rgba(255,255,255,0.10)";
-        ctx.fill();
+        ctx2d.fillStyle = "rgba(255,255,255,0.10)";
+        ctx2d.fill();
       }
 
-      ctx.strokeStyle = "rgba(255,255,255,0.20)";
-      ctx.lineWidth = 1.1;
-      ctx.stroke();
+      ctx2d.strokeStyle = "rgba(255,255,255,0.20)";
+      ctx2d.lineWidth = 1.1;
+      ctx2d.stroke();
 
       const mid = (a0+a1)/2;
       const iconR = outerR*0.82;
 
-      ctx.save();
-      ctx.rotate(mid);
-      ctx.translate(iconR, 0);
+      ctx2d.save();
+      ctx2d.rotate(mid);
+      ctx2d.translate(iconR, 0);
 
       if (sec.icon === "fish"){
         drawFishIcon(0, 0, 1.05, "rgba(255,255,255,0.92)");
-
-        // ✅ ещё ниже: было 62, делаем 82
-        ctx.rotate(Math.PI/2);
+        ctx2d.rotate(Math.PI/2);
         drawVerticalChars(sec.label, 0, 82, sec.text);
       } else {
         drawLeafIcon(0, 0, 0.9, "rgba(255,255,255,0.82)");
       }
 
-      ctx.restore();
+      ctx2d.restore();
     }
 
-    ctx.restore();
+    ctx2d.restore();
 
-    // центр только во время спина
     if (spinning){
-      ctx.save();
-      ctx.translate(cx,cy);
+      ctx2d.save();
+      ctx2d.translate(cx,cy);
 
-      ctx.beginPath();
-      ctx.arc(0,0, innerR*1.55, 0, Math.PI*2);
-      ctx.fillStyle = "rgba(255,255,255,0.92)";
-      ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.08)";
-      ctx.lineWidth = 10;
-      ctx.stroke();
+      ctx2d.beginPath();
+      ctx2d.arc(0,0, innerR*1.55, 0, Math.PI*2);
+      ctx2d.fillStyle = "rgba(255,255,255,0.92)";
+      ctx2d.fill();
+      ctx2d.strokeStyle = "rgba(0,0,0,0.08)";
+      ctx2d.lineWidth = 10;
+      ctx2d.stroke();
 
-      ctx.beginPath();
-      ctx.arc(0,0, innerR*1.05, 0, Math.PI*2);
-      ctx.fillStyle = "rgba(240,250,255,0.96)";
-      ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.10)";
-      ctx.lineWidth = 6;
-      ctx.stroke();
+      ctx2d.beginPath();
+      ctx2d.arc(0,0, innerR*1.05, 0, Math.PI*2);
+      ctx2d.fillStyle = "rgba(240,250,255,0.96)";
+      ctx2d.fill();
+      ctx2d.strokeStyle = "rgba(0,0,0,0.10)";
+      ctx2d.lineWidth = 6;
+      ctx2d.stroke();
 
-      ctx.fillStyle = "rgba(11,18,32,0.90)";
-      ctx.font = `950 ${Math.floor(innerR*0.38)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("ICE", 0, -innerR*0.18);
-      ctx.fillText("FISHING", 0, innerR*0.20);
+      ctx2d.fillStyle = "rgba(11,18,32,0.90)";
+      ctx2d.font = `950 ${Math.floor(innerR*0.38)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+      ctx2d.textAlign = "center";
+      ctx2d.textBaseline = "middle";
+      ctx2d.fillText("ICE", 0, -innerR*0.18);
+      ctx2d.fillText("FISHING", 0, innerR*0.20);
 
-      ctx.restore();
+      ctx2d.restore();
     }
-
-    // болтики
-    ctx.save();
-    ctx.translate(cx,cy);
-    const bolts = 18;
-    for (let i=0;i<bolts;i++){
-      const a = (i/bolts)*Math.PI*2;
-      const r = outerR*1.01;
-      const x = Math.cos(a)*r;
-      const y = Math.sin(a)*r;
-      ctx.beginPath();
-      ctx.arc(x,y, outerR*0.012, 0, Math.PI*2);
-      ctx.fillStyle = "rgba(255,255,255,0.22)";
-      ctx.fill();
-    }
-    ctx.restore();
   }
 
-  // ---------- СПИН (ВСЕ ОДИНАКОВЫЕ) ----------
-  // ✅ без jitter, без “разной силы”, одинаковое время, одинаковые обороты
+  // ---------- СПИН ----------
   function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
-
   const SPIN_TURNS = 9;
   const SPIN_MS = 4200;
 
-  function pickWinnerIndex(){
-    return Math.floor(rand01() * N);
-  }
+  function pickWinnerIndex(){ return Math.floor(rand01() * N); }
 
   async function spinOnce(){
     if (spinning) return;
@@ -617,12 +638,10 @@
     setHUDSpinning(true);
 
     const winnerIdx = pickWinnerIndex();
-
     const pointerWorld = -Math.PI/2;
     const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
-    let target = pointerWorld - winnerCenter;
 
-    // ✅ фиксированное число оборотов, без смещения
+    let target = pointerWorld - winnerCenter;
     target = target - SPIN_TURNS * Math.PI * 2;
 
     const start = angle;
@@ -634,28 +653,23 @@
         const t = Math.min(1,(now-t0)/SPIN_MS);
         const k = easeOutCubic(t);
         angle = start + (end-start)*k;
-
         drawWheel(indexAtPointer(angle));
-
         if (t<1) requestAnimationFrame(frame);
         else resolve();
       }
       requestAnimationFrame(frame);
     });
 
-    // фиксируем
     const finalIdx = indexAtPointer(angle);
     addHistory(finalIdx);
 
     spinning = false;
     setHUDSpinning(false);
     drawWheel(null);
-
-    // ✅ новый таймер только после фиксации
     startCountdown();
   }
 
-  // ---------- HUD цикл ----------
+  // ---------- HUD ----------
   const hudMain = document.getElementById("hudMain");
   const hudSub  = document.getElementById("hudSub");
   let countdownTimer = null;
