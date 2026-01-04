@@ -32,7 +32,6 @@
         url("bg.png") center/cover no-repeat fixed;
     }
 
-    /* снег */
     .snow { pointer-events:none; position:fixed; inset:0; z-index:2; overflow:hidden; }
     .snow span{
       position:absolute; top:-10vh;
@@ -45,7 +44,6 @@
     }
     @keyframes fall{ from { transform: translateY(-10vh);} to { transform: translateY(110vh);} }
 
-    /* HUD */
     .leftHUD{
       position:fixed; left:12px; top:14px;
       display:flex; align-items:center; gap:10px;
@@ -73,7 +71,6 @@
       letter-spacing:.2px; margin-top:3px; font-size:11px;
     }
 
-    /* TON */
     .tonBtn{
       position:fixed; right:12px; top:14px; z-index:6;
       display:flex; align-items:center; gap:10px;
@@ -90,7 +87,6 @@
     .tonBtn img{ width:22px; height:22px; display:block; border-radius:6px; }
     .tonBtn:active{ transform: translateY(1px); }
 
-    /* колесо */
     .wheelWrap{
       position:fixed;
       left:50%;
@@ -103,7 +99,6 @@
     }
     canvas{ width:100%; height:100%; border-radius:50%; }
 
-    /* указатель */
     .pointer{
       position:absolute; top:-8px; left:50%;
       transform:translateX(-50%);
@@ -123,7 +118,6 @@
       opacity:.9;
     }
 
-    /* нижний блок */
     .bottomUI{
       position:fixed;
       left:50%;
@@ -136,7 +130,6 @@
       z-index:4;
     }
 
-    /* история */
     .historyBar{
       width:100%;
       display:flex; gap:6px;
@@ -172,7 +165,6 @@
     .chip.fish::before{ content:"🐟"; }
     .chip.leaf::before{ content:"🍃"; }
 
-    /* кнопки */
     .bonusPanel{ width:100%; display:flex; flex-direction:column; gap:10px; }
     .bonusTop, .bonusBottom{ display:flex; gap:8px; justify-content:space-between; }
 
@@ -211,7 +203,7 @@
     .c-leaf2{ background: color-mix(in srgb, var(--leaf2) 86%, white 14%); color:#fff; }
 
     .c-blue { background: color-mix(in srgb, var(--blue) 74%, white 26%); color:#fff; }
-    .c-orange{ background: color-mix(in srgb, var(--orange) 74%, white 26%); color:#1b1b1b; }
+    .c-orange{ background: color-mix(in srgb, var(--orange) 74%, white 26%); color:#1b1bb; }
     .c-red { background: color-mix(in srgb, var(--red) 74%, white 26%); color:#fff; }
 
     .placedBet{
@@ -230,7 +222,6 @@
       color:#0b1220;
     }
 
-    /* панель фишек + undo */
     .betRow{
       display:flex;
       justify-content:center;
@@ -284,7 +275,6 @@
     }
     .chev{ opacity:.75; font-weight:950; margin-left:6px; }
 
-    /* меню фишек вверх */
     .betMenu{
       position:absolute;
       left:50%;
@@ -318,7 +308,6 @@
     .c05{ background:#f59e0b; color:#1b1b1b; }
     .c10{ background:#ef4444; color:#fff; }
 
-    /* TON панель */
     .modalOverlay{
       position:fixed;
       inset:0;
@@ -405,7 +394,7 @@
   <div class="leftHUD">
     <div class="cube"></div>
     <div class="hudText">
-      <span id="hudMain">6</span>
+      <span id="hudMain">10</span>
       <small id="hudSub">до спина</small>
     </div>
   </div>
@@ -489,7 +478,6 @@
     </div>
   </div>
 
-  <!-- TonConnect UI -->
   <script type="module">
     try{
       const mod = await import("https://esm.sh/@tonconnect/ui@2.0.10");
@@ -630,7 +618,7 @@
     btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
 
-  // --- WHEEL ---
+  // --- WHEEL SETUP ---
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -891,11 +879,9 @@
   const hudMain = document.getElementById("hudMain");
   const hudSub  = document.getElementById("hudSub");
 
-  function setHUDSpinning(isSpin){
-    if (isSpin){
-      hudMain.textContent = "ICE FISHING";
-      hudSub.textContent = "spinning";
-    }
+  function setHUDSpinning(){
+    hudMain.textContent = "ICE FISHING";
+    hudSub.textContent = "spinning";
   }
 
   // history
@@ -915,7 +901,7 @@
   }
 
   // ==========================
-  // LIVE SYNC (NO DUPES)
+  // LIVE SYNC (server history already completed)
   // ==========================
   let timeOffset = 0;
   let currentRoundId = null;
@@ -923,10 +909,10 @@
   let scheduledSpinTimer = null;
   let lastAppliedHistoryRoundId = null;
 
-  function serverTimeNow() { return Date.now() + timeOffset; }
+  function serverTimeNow(){ return Date.now() + timeOffset; }
 
-  async function fetchState() {
-    const r = await fetch("/api/state", { cache: "no-store" });
+  async function fetchState(){
+    const r = await fetch("/api/state", { cache:"no-store" });
     if (!r.ok) throw new Error("api_state_error");
     return await r.json();
   }
@@ -940,25 +926,21 @@
   }
 
   function applyHistoryFromServer(state){
-    // ✅ показываем только завершённые раунды (без текущего)
-    const filtered = (state.history || []).filter(h => h.roundId < state.round.roundId);
+    // ✅ сервер уже отдаёт только completed history — показываем как есть
+    const list = (state.history || []).slice(-HISTORY_MAX);
 
-    // ✅ всегда полностью заменяем массив
     history.length = 0;
-    const last = filtered.slice(-HISTORY_MAX);
-    for (const item of last) history.push(item.winnerIndex);
+    for (const item of list) history.push(item.winnerIndex);
 
     renderHistory();
-    lastAppliedHistoryRoundId = filtered.length ? filtered[filtered.length - 1].roundId : null;
+    lastAppliedHistoryRoundId = list.length ? list[list.length - 1].roundId : null;
   }
 
   function scheduleSpinAtEnd(endAt, winnerIndex, roundId){
     if (scheduledSpinTimer) clearTimeout(scheduledSpinTimer);
 
-    const delay = Math.max(0, endAt - serverTimeNow()); // спин стартует на 0
-    scheduledSpinTimer = setTimeout(() => {
-      spinToWinner(winnerIndex);
-    }, delay);
+    const delay = Math.max(0, endAt - serverTimeNow());
+    scheduledSpinTimer = setTimeout(() => { spinToWinner(winnerIndex); }, delay);
 
     scheduledForRoundId = roundId;
   }
@@ -966,7 +948,7 @@
   async function spinToWinner(winnerIndex){
     if (spinning) return;
     spinning = true;
-    setHUDSpinning(true);
+    setHUDSpinning();
 
     const target = buildStrongTarget(winnerIndex);
     const start = angle;
@@ -994,29 +976,24 @@
       const state = await fetchState();
       timeOffset = state.serverNow - Date.now();
 
-      // ✅ обновляем историю только если изменился последний ЗАВЕРШЁННЫЙ раунд
-      const done = (state.history || []).filter(h => h.roundId < state.round.roundId);
-      const lastDoneRoundId = done.length ? done[done.length - 1].roundId : null;
-
-      if (lastAppliedHistoryRoundId !== lastDoneRoundId){
+      // history update only when last history round changes
+      const lastHistRoundId = state.history?.length ? state.history[state.history.length - 1].roundId : null;
+      if (lastAppliedHistoryRoundId !== lastHistRoundId){
         applyHistoryFromServer(state);
       }
 
       setHUDCountdown(state.round.endAt);
 
-      // schedule spin once per round
       if (currentRoundId !== state.round.roundId) currentRoundId = state.round.roundId;
 
       if (scheduledForRoundId !== state.round.roundId){
         scheduleSpinAtEnd(state.round.endAt, state.round.winnerIndex, state.round.roundId);
       }
-    }catch{
-      // ignore
-    }
+    }catch{}
   }
 
   // init
-  updateUndoState();
+  function updateUndoState(){ document.getElementById("undoBtn").disabled = actions.length === 0; }
   drawWheel(null);
   renderHistory();
   syncLoop();
