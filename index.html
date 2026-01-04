@@ -1,5 +1,359 @@
 <!doctype html>
+<html lang="ru"><!doctype html>
 <html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>IceFishing Wheel</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root { --bg:#0b1220; --card:#121b2f; --text:#e7eefc; --muted:#9bb0d0; --accent:#5eead4; }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      background: radial-gradient(1200px 800px at 30% 0%, #15224a 0%, var(--bg) 55%);
+      color:var(--text);
+      padding:16px;
+    }
+    .wrap{ max-width:520px; margin:0 auto; }
+    .card{
+      background: color-mix(in srgb, var(--card) 92%, transparent);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:18px;
+      padding:14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+    }
+    h1{ font-size:18px; margin:0 0 10px; display:flex; gap:8px; align-items:center; }
+    .sub{ color:var(--muted); font-size:13px; margin:0 0 12px; }
+    .stage{ position:relative; display:flex; justify-content:center; align-items:center; padding:12px 0 6px; }
+    canvas{ width:min(360px, 92vw); height:min(360px, 92vw); }
+    .pointer{
+      position:absolute; top:2px;
+      width:0; height:0;
+      border-left:14px solid transparent;
+      border-right:14px solid transparent;
+      border-top:24px solid var(--accent);
+      filter: drop-shadow(0 6px 10px rgba(0,0,0,.45));
+    }
+    .controls{ display:flex; gap:10px; margin-top:12px; }
+    button{
+      flex:1;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color:var(--text);
+      padding:12px 14px;
+      border-radius:14px;
+      font-weight:700;
+      cursor:pointer;
+      transition:.15s transform, .15s background;
+    }
+    button:active{ transform: scale(.98); }
+    button.primary{
+      background: linear-gradient(135deg, rgba(94,234,212,.25), rgba(94,234,212,.05));
+      border-color: rgba(94,234,212,.35);
+    }
+    button:disabled{ opacity:.55; cursor:not-allowed; }
+    .result{
+      margin-top:12px;
+      padding:12px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.04);
+      display:flex; justify-content:space-between; align-items:center;
+      gap:12px;
+    }
+    .pill{
+      padding:6px 10px;
+      border-radius:999px;
+      background: rgba(94,234,212,.14);
+      border:1px solid rgba(94,234,212,.25);
+      color: var(--accent);
+      font-weight:800;
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .small{ font-size:12px; color:var(--muted); margin-top:8px; }
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:8px;
+      margin-top:10px;
+      font-size:12px;
+      color:var(--muted);
+    }
+    .grid code{ color:var(--text); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>🎣 Колесо улова</h1>
+      <p class="sub">Нажми «SPIN» — колесо крутится, замедляется и выдаёт рыбу.</p>
+
+      <div class="stage">
+        <div class="pointer"></div>
+        <canvas id="wheel" width="600" height="600"></canvas>
+      </div>
+
+      <div class="controls">
+        <button id="spinBtn" class="primary">▶ SPIN</button>
+        <button id="resetBtn">↺ Reset</button>
+      </div>
+
+      <div class="result" id="resultBox">
+        <div>
+          <div style="font-weight:800">Результат: <span id="fishName">—</span></div>
+          <div class="small">Сектор: <span id="sectorIndex">—</span></div>
+        </div>
+        <div class="pill" id="statusPill">READY</div>
+      </div>
+
+      <div class="grid">
+        <div>URL: <code id="urlLabel"></code></div>
+        <div>User: <code id="userLabel"></code></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Telegram WebApp init (не обязательно, но приятно)
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      tg.setHeaderColor?.("#0b1220");
+    }
+    document.getElementById("urlLabel").innerText = location.host;
+    document.getElementById("userLabel").innerText = tg?.initDataUnsafe?.user?.username || "—";
+
+    // ==== НАСТРОЙКИ КОЛЕСА ====
+    // Равные "ячейки" (секторы). Можешь менять названия рыб как хочешь.
+    const sectors = [
+      { name: "Окунь" },
+      { name: "Щука" },
+      { name: "Судак" },
+      { name: "Карась" },
+      { name: "Лещ" },
+      { name: "Форель" },
+      { name: "Налим" },
+      { name: "Плотва" },
+      { name: "Сом" },
+      { name: "Хариус" },
+      { name: "Голавль" },
+      { name: "Сазан" },
+    ];
+    // Если хочешь ровно как "сетка" — держим одинаковый вес:
+    const equalWeights = sectors.map(() => 1);
+
+    // ==== CANVAS DRAW ====
+    const canvas = document.getElementById("wheel");
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width, H = canvas.height;
+    const cx = W / 2, cy = H / 2;
+    const radius = Math.min(W, H) * 0.44;
+    const inner = radius * 0.12;
+
+    const spinBtn = document.getElementById("spinBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const fishNameEl = document.getElementById("fishName");
+    const sectorIndexEl = document.getElementById("sectorIndex");
+    const statusPill = document.getElementById("statusPill");
+
+    let spinning = false;
+    let angle = 0; // radians
+    let lastWinner = null;
+
+    function sum(arr){ return arr.reduce((a,b)=>a+b,0); }
+    function pickWeightedIndex(weights) {
+      const total = sum(weights);
+      let r = Math.random() * total;
+      for (let i = 0; i < weights.length; i++) {
+        r -= weights[i];
+        if (r <= 0) return i;
+      }
+      return weights.length - 1;
+    }
+
+    function drawWheel(highlightIndex = null) {
+      ctx.clearRect(0,0,W,H);
+
+      // фон круга
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+
+      const n = sectors.length;
+      const step = (Math.PI * 2) / n;
+
+      for (let i=0;i<n;i++){
+        const a0 = i*step;
+        const a1 = a0 + step;
+
+        // чередование заливки
+        const isEven = i % 2 === 0;
+        const base = isEven ? "rgba(255,255,255,0.06)" : "rgba(94,234,212,0.08)";
+        const hi = "rgba(94,234,212,0.18)";
+        ctx.beginPath();
+        ctx.moveTo(0,0);
+        ctx.arc(0,0,radius,a0,a1);
+        ctx.closePath();
+        ctx.fillStyle = (highlightIndex===i) ? hi : base;
+        ctx.fill();
+
+        // граница сектора
+        ctx.strokeStyle = "rgba(255,255,255,0.10)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // текст
+        const mid = (a0+a1)/2;
+        ctx.save();
+        ctx.rotate(mid);
+        ctx.translate(radius*0.62, 0);
+        ctx.rotate(Math.PI/2);
+        ctx.fillStyle = "rgba(231,238,252,0.95)";
+        ctx.font = "800 26px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(sectors[i].name, 0, 0);
+        ctx.restore();
+      }
+
+      // внутренний круг
+      ctx.beginPath();
+      ctx.arc(0,0, inner*2.2, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.12)";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // “гайка” по центру
+      ctx.beginPath();
+      ctx.arc(0,0, inner, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.fill();
+
+      ctx.restore();
+
+      // рамка внешняя
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI*2);
+      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.lineWidth = 6;
+      ctx.stroke();
+    }
+
+    function normalizeAngle(a){
+      const two = Math.PI*2;
+      return ((a % two) + two) % two;
+    }
+
+    // Указатель сверху (12 часов). Он "смотрит" на угол -90° (в canvas это -Math.PI/2).
+    // Мы определяем индекс сектора, который оказался под указателем.
+    function getIndexAtPointer(currentAngle){
+      const n = sectors.length;
+      const step = (Math.PI*2)/n;
+
+      // угол указателя в системе колеса:
+      // мы вращаем колесо на angle, значит "мир" на -angle.
+      // pointer направлен вверх => -PI/2
+      const pointerWorld = -Math.PI/2;
+
+      // какой угол колеса находится под pointer:
+      const a = normalizeAngle(pointerWorld - currentAngle);
+
+      // индекс сектора:
+      const idx = Math.floor(a / step);
+      return Math.max(0, Math.min(n-1, idx));
+    }
+
+    // Анимация со “сбрасыванием скорости” (easeOutCubic)
+    function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+
+    async function spin(){
+      if (spinning) return;
+      spinning = true;
+      statusPill.textContent = "SPINNING";
+      spinBtn.disabled = true;
+
+      // Выбираем заранее выигрышный индекс (сейчас веса одинаковые)
+      const winnerIndex = pickWeightedIndex(equalWeights);
+
+      // Чтобы докрутить именно на winner:
+      // Вычисляем, какой угол нужен, чтобы winner оказался под pointer.
+      const n = sectors.length;
+      const step = (Math.PI*2)/n;
+
+      // Центр выигрышного сектора (в координатах колеса)
+      const winnerCenter = (winnerIndex + 0.5) * step;
+
+      // Pointer вверх (-PI/2). Хотим: (pointerWorld - finalAngle) == winnerCenter (mod 2π)
+      const pointerWorld = -Math.PI/2;
+      let targetAngle = pointerWorld - winnerCenter;
+
+      // Добавим несколько полных оборотов + небольшой рандом внутри сектора
+      const extraTurns = 6 + Math.floor(Math.random()*4); // 6-9
+      const jitter = (Math.random() - 0.5) * step * 0.35; // небольшой сдвиг, но всё равно внутри сектора
+      targetAngle = targetAngle + jitter - extraTurns * Math.PI * 2;
+
+      const start = angle;
+      const end = targetAngle;
+
+      const duration = 4200 + Math.floor(Math.random()*900); // ms
+      const t0 = performance.now();
+
+      await new Promise(resolve => {
+        function frame(now){
+          const t = Math.min(1, (now - t0)/duration);
+          const k = easeOutCubic(t);
+          angle = start + (end - start) * k;
+
+          // рисуем с подсветкой сектора, который сейчас под pointer
+          const idx = getIndexAtPointer(angle);
+          drawWheel(idx);
+
+          if (t < 1) requestAnimationFrame(frame);
+          else resolve();
+        }
+        requestAnimationFrame(frame);
+      });
+
+      // Финальная фиксация и результат
+      const finalIdx = getIndexAtPointer(angle);
+      lastWinner = finalIdx;
+
+      fishNameEl.textContent = sectors[finalIdx].name;
+      sectorIndexEl.textContent = String(finalIdx + 1) + " / " + sectors.length;
+      statusPill.textContent = "WIN!";
+      drawWheel(finalIdx);
+
+      // Можно отправлять результат в бота через tg.sendData (позже подключим сервер)
+      // tg?.sendData?.(JSON.stringify({ fish: sectors[finalIdx].name, idx: finalIdx }));
+
+      spinBtn.disabled = false;
+      spinning = false;
+    }
+
+    function reset(){
+      if (spinning) return;
+      angle = 0;
+      lastWinner = null;
+      fishNameEl.textContent = "—";
+      sectorIndexEl.textContent = "—";
+      statusPill.textContent = "READY";
+      drawWheel(null);
+    }
+
+    spinBtn.addEventListener("click", spin);
+    resetBtn.addEventListener("click", reset);
+
+    // первый рендер
+    drawWheel(null);
+  </script>
+</body>
+</html>
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
