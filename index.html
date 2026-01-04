@@ -8,9 +8,10 @@
 
   <style>
     :root{
-      /* Сегменты */
-      --leaf1:#9aa7b5;   /* серо-голубой */
-      --leaf2:#7fe6ff;   /* ✅ ярко-голубой “как небо” */
+      /* ✅ Leaf цвета как ты просил */
+      --leaf1:#e6e8ec;   /* почти белый, сероватый */
+      --leaf2:#334455;   /* тёмно-серый с голубым оттенком */
+
       --red:#e11d48;
       --orange:#fb923c;
       --blue:#0b2a8f;
@@ -32,7 +33,7 @@
         url("bg.png") center/cover no-repeat fixed;
     }
 
-    /* Снег */
+    /* снег */
     .snow { pointer-events:none; position:fixed; inset:0; z-index:2; overflow:hidden; }
     .snow span{
       position:absolute; top:-10vh;
@@ -43,9 +44,9 @@
       opacity:.85;
       animation: fall linear infinite;
     }
-    @keyframes fall{ from { transform: translateY(-10vh); } to { transform: translateY(110vh); } }
+    @keyframes fall{ from { transform: translateY(-10vh);} to { transform: translateY(110vh);} }
 
-    /* HUD слева */
+    /* HUD */
     .leftHUD{
       position:fixed; left:12px; top:14px;
       display:flex; align-items:center; gap:10px;
@@ -126,7 +127,7 @@
       opacity:.9;
     }
 
-    /* История */
+    /* история */
     .historyBar{
       width:min(430px, 92vw);
       display:flex; gap:6px;
@@ -162,20 +163,103 @@
     .chip.fish::before{ content:"🐟"; }
     .chip.leaf::before{ content:"🍃"; }
 
-    /* Панель ставок/кнопок */
+    /* панель кнопок */
     .bonusPanel{
       width:min(430px, 92vw);
       display:flex;
       flex-direction:column;
       gap:10px;
     }
+    .bonusTop, .bonusBottom{ display:flex; gap:8px; justify-content:space-between; }
 
-    /* ✅ селектор ставки по центру под историей */
+    .btn{
+      position:relative;
+      border:1px solid rgba(0,0,0,.12);
+      background: rgba(255,255,255,.55);
+      border-radius:16px;
+      box-shadow: 0 12px 26px rgba(0,0,0,.16);
+      backdrop-filter: blur(6px);
+      user-select:none;
+      display:flex; align-items:center; justify-content:center;
+      gap:8px;
+      font-weight:950;
+      cursor:pointer;
+      -webkit-tap-highlight-color: transparent;
+      overflow:hidden;
+    }
+    .btn:active{ transform: translateY(1px); }
+
+    .btn.small{ height:42px; flex:1 1 0; font-size:13px; }
+    .btn.big{
+      height:58px; flex:1 1 0; font-size:12px;
+      text-transform:uppercase; letter-spacing:.4px;
+      text-align:center; padding:0 10px;
+    }
+
+    .btnIcon{
+      width:26px; height:26px;
+      border-radius:999px;
+      background: rgba(255,255,255,.45);
+      display:flex; align-items:center; justify-content:center;
+      font-size:16px;
+      border:1px solid rgba(0,0,0,.10);
+    }
+
+    /* Цвета кнопок */
+    .c-leaf1{ background: color-mix(in srgb, var(--leaf1) 84%, white 16%); color:#0b1220; }
+    .c-leaf2{ background: color-mix(in srgb, var(--leaf2) 86%, white 14%); color:#fff; }
+
+    .c-blue { background: color-mix(in srgb, var(--blue) 74%, white 26%); color:#fff; }
+    .c-orange{ background: color-mix(in srgb, var(--orange) 74%, white 26%); color:#1b1b1b; }
+    .c-red { background: color-mix(in srgb, var(--red) 74%, white 26%); color:#fff; }
+
+    /* сумма ставки на кнопке */
+    .placedBet{
+      position:absolute;
+      right:8px;
+      top:8px;
+      min-width:34px;
+      height:28px;
+      padding:0 8px;
+      border-radius:999px;
+      border:2px solid rgba(0,0,0,.12);
+      display:flex; align-items:center; justify-content:center;
+      font-size:11px; font-weight:950;
+      box-shadow: 0 10px 18px rgba(0,0,0,.14);
+      background: rgba(255,255,255,.75);
+      color:#0b1220;
+    }
+
+    /* ✅ панель выбора фишек под бонусами */
     .betRow{
       display:flex;
       justify-content:center;
       align-items:center;
+      gap:10px;
       margin-top:2px;
+    }
+    .undoBtn{
+      width:44px;
+      height:44px;
+      border-radius:999px;
+      border:1px solid rgba(0,0,0,.12);
+      background: rgba(255,255,255,.60);
+      box-shadow: 0 12px 26px rgba(0,0,0,.16);
+      backdrop-filter: blur(6px);
+      cursor:pointer;
+      user-select:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:950;
+      color:#0b1220;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .undoBtn:active{ transform: translateY(1px); }
+    .undoBtn[disabled]{
+      opacity:.55;
+      cursor:not-allowed;
+      transform:none;
     }
 
     .betSelect{
@@ -207,117 +291,38 @@
       font-weight:950;
       margin-left:6px;
     }
-
     .betMenu{
       position:absolute;
       left:50%;
       transform:translateX(-50%);
       top:46px;
-      min-width:220px;
+      min-width:240px;
       padding:10px;
       border-radius:16px;
       border:1px solid rgba(0,0,0,.12);
-      background: rgba(255,255,255,.80);
+      background: rgba(255,255,255,.82);
       box-shadow: 0 18px 34px rgba(0,0,0,.22);
       backdrop-filter: blur(8px);
       display:none;
       z-index:10;
     }
     .betMenu.open{ display:block; }
-    .betOptions{
-      display:flex;
-      gap:8px;
-      justify-content:center;
-    }
+    .betOptions{ display:flex; gap:8px; justify-content:center; }
     .betChip{
       width:46px; height:46px;
       border-radius:999px;
       border:2px solid rgba(0,0,0,.12);
-      display:flex;
-      align-items:center;
-      justify-content:center;
+      display:flex; align-items:center; justify-content:center;
       font-weight:950;
       cursor:pointer;
       user-select:none;
       box-shadow: 0 10px 18px rgba(0,0,0,.14);
     }
     .betChip:active{ transform: translateY(1px); }
-
-    /* разные цвета фишек */
-    .c01{ background:#7c3aed; color:#fff; } /* фиолет */
-    .c02{ background:#22c55e; color:#0b1220; } /* зелёная */
-    .c05{ background:#f59e0b; color:#1b1b1b; } /* оранжевая */
-    .c10{ background:#ef4444; color:#fff; } /* красная */
-
-    /* кнопки выбора (кликабельные) */
-    .bonusTop, .bonusBottom{
-      display:flex;
-      gap:8px;
-      justify-content:space-between;
-    }
-
-    .btn{
-      position:relative;
-      border:1px solid rgba(0,0,0,.12);
-      background: rgba(255,255,255,.55);
-      border-radius:16px;
-      box-shadow: 0 12px 26px rgba(0,0,0,.16);
-      backdrop-filter: blur(6px);
-      user-select:none;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      gap:8px;
-      font-weight:950;
-      color:#0b1220;
-      cursor:pointer;
-      -webkit-tap-highlight-color: transparent;
-      overflow:hidden;
-    }
-    .btn:active{ transform: translateY(1px); }
-
-    .btn.small{
-      height:42px; flex:1 1 0; font-size:13px;
-    }
-    .btn.big{
-      height:58px; flex:1 1 0; font-size:12px;
-      text-transform:uppercase; letter-spacing:.4px;
-      text-align:center; padding:0 10px;
-    }
-
-    .btnIcon{
-      width:26px; height:26px;
-      border-radius:999px;
-      background: rgba(255,255,255,.45);
-      display:flex; align-items:center; justify-content:center;
-      font-size:16px;
-      border:1px solid rgba(0,0,0,.10);
-    }
-
-    /* Цвета кнопок */
-    .c-leaf1{ background: color-mix(in srgb, var(--leaf1) 72%, white 28%); }
-    .c-leaf2{ background: color-mix(in srgb, var(--leaf2) 72%, white 28%); }
-
-    .c-blue { background: color-mix(in srgb, var(--blue) 74%, white 26%); color:#fff; }
-    .c-orange{ background: color-mix(in srgb, var(--orange) 74%, white 26%); color:#1b1b1b; }
-    .c-red { background: color-mix(in srgb, var(--red) 74%, white 26%); color:#fff; }
-
-    /* ✅ маркер установленной ставки на кнопке */
-    .placedBet{
-      position:absolute;
-      right:8px;
-      top:8px;
-      width:28px;
-      height:28px;
-      border-radius:999px;
-      border:2px solid rgba(0,0,0,.12);
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-size:11px;
-      font-weight:950;
-      box-shadow: 0 10px 18px rgba(0,0,0,.14);
-    }
+    .c01{ background:#7c3aed; color:#fff; }
+    .c02{ background:#22c55e; color:#0b1220; }
+    .c05{ background:#f59e0b; color:#1b1b1b; }
+    .c10{ background:#ef4444; color:#fff; }
   </style>
 </head>
 
@@ -346,25 +351,6 @@
     <div class="historyBar" id="historyBar"></div>
 
     <div class="bonusPanel">
-      <!-- ✅ выбор ставки -->
-      <div class="betRow">
-        <div class="betSelect" id="betSelect">
-          <span id="betValue">0.2</span>
-          <span class="betHint">tap to change</span>
-          <span class="chev">▾</span>
-
-          <div class="betMenu" id="betMenu">
-            <div class="betOptions">
-              <div class="betChip c01" data-bet="0.1">0.1</div>
-              <div class="betChip c02" data-bet="0.2">0.2</div>
-              <div class="betChip c05" data-bet="0.5">0.5</div>
-              <div class="betChip c10" data-bet="1">1</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ✅ кликабельные ставки -->
       <div class="bonusTop">
         <div class="btn small c-leaf1 bettable" data-target="leaf1">
           <span class="btnIcon">🍃</span>
@@ -390,6 +376,27 @@
           Huge Reds Bonus
         </div>
       </div>
+
+      <!-- ✅ ПАНЕЛЬ ФИШЕК ПОД БОНУСАМИ + UNDO -->
+      <div class="betRow">
+        <button class="undoBtn" id="undoBtn" title="Undo last bet" disabled>↩</button>
+
+        <div class="betSelect" id="betSelect">
+          <span id="betValue">0.2</span>
+          <span class="betHint">tap to change</span>
+          <span class="chev">▾</span>
+
+          <div class="betMenu" id="betMenu">
+            <div class="betOptions">
+              <div class="betChip c01" data-bet="0.1">0.1</div>
+              <div class="betChip c02" data-bet="0.2">0.2</div>
+              <div class="betChip c05" data-bet="0.5">0.5</div>
+              <div class="betChip c10" data-bet="1">1</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -402,7 +409,7 @@
     tg?.showPopup?.({ title: "TON", message: "TON Connect скоро будет подключен.", buttons: [{type:"ok"}] });
   });
 
-  // ---------- СНЕГ ----------
+  // снег
   (function initSnow(){
     const box = document.getElementById("snow");
     const flakes = 26;
@@ -422,12 +429,28 @@
     }
   })();
 
-  // ---------- BET SELECT ----------
+  // ---------- BET SELECT + UNDO ----------
   let currentBet = 0.2;
 
   const betSelect = document.getElementById("betSelect");
   const betMenu = document.getElementById("betMenu");
   const betValue = document.getElementById("betValue");
+  const undoBtn = document.getElementById("undoBtn");
+
+  // target -> totalBet
+  const totals = new Map();
+  // stack of actions: { target, amount }
+  const actions = [];
+
+  function fmt(x){
+    // аккуратный формат: 0.1/0.2/0.5/1/1.2/2.3
+    const s = (Math.round(x*10)/10).toFixed(1);
+    return s.endsWith(".0") ? s.slice(0,-2) : s;
+  }
+
+  function updateUndoState(){
+    undoBtn.disabled = actions.length === 0;
+  }
 
   function closeBetMenu(){ betMenu.classList.remove("open"); }
   function toggleBetMenu(){ betMenu.classList.toggle("open"); }
@@ -441,54 +464,63 @@
     chip.addEventListener("click", (e) => {
       e.stopPropagation();
       currentBet = Number(chip.dataset.bet);
-      betValue.textContent = currentBet.toFixed(currentBet === 1 ? 0 : 1);
+      betValue.textContent = fmt(currentBet);
       closeBetMenu();
     });
   });
 
   document.addEventListener("click", () => closeBetMenu());
 
-  // ---------- PLACING BETS ON BUTTONS ----------
-  // хранит ставки по целям
-  const placed = new Map(); // target -> bet
+  // ставим сумму на кнопке
+  function renderTotalOnButton(target){
+    const btn = document.querySelector(`.bettable[data-target="${target}"]`);
+    if (!btn) return;
 
-  function betColorClass(bet){
-    if (bet === 0.1) return "c01";
-    if (bet === 0.2) return "c02";
-    if (bet === 0.5) return "c05";
-    return "c10"; // 1
-  }
-
-  function renderPlaced(el, bet){
-    // удалить старую
-    const old = el.querySelector(".placedBet");
+    const total = totals.get(target) || 0;
+    const old = btn.querySelector(".placedBet");
     if (old) old.remove();
 
-    const p = document.createElement("div");
-    p.className = "placedBet " + betColorClass(bet);
-    p.textContent = String(bet);
-    el.appendChild(p);
+    if (total > 0){
+      const badge = document.createElement("div");
+      badge.className = "placedBet";
+      badge.textContent = fmt(total);
+      btn.appendChild(badge);
+    }
   }
 
-  function clearPlaced(el){
-    const old = el.querySelector(".placedBet");
-    if (old) old.remove();
+  function addBet(target, amount){
+    const prev = totals.get(target) || 0;
+    const next = Math.round((prev + amount) * 10) / 10;
+    totals.set(target, next);
+
+    actions.push({ target, amount });
+    renderTotalOnButton(target);
+    updateUndoState();
   }
 
+  function undoLast(){
+    if (actions.length === 0) return;
+    const last = actions.pop();
+    const prev = totals.get(last.target) || 0;
+    const next = Math.round((prev - last.amount) * 10) / 10;
+    if (next <= 0) totals.delete(last.target);
+    else totals.set(last.target, next);
+
+    renderTotalOnButton(last.target);
+    updateUndoState();
+  }
+
+  undoBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    undoLast();
+  });
+
+  // клик по кнопкам — добавляет ставку (суммируется)
   document.querySelectorAll(".bettable").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const target = btn.dataset.target;
-
-      // повторный клик — снимаем
-      if (placed.has(target)){
-        placed.delete(target);
-        clearPlaced(btn);
-        return;
-      }
-      // иначе ставим текущую фишку
-      placed.set(target, currentBet);
-      renderPlaced(btn, currentBet);
+      addBet(target, currentBet);
     });
   });
 
@@ -521,14 +553,14 @@
     if (sectors[i]) continue;
     const wantLeaf1 = (toggle % 2 === 0);
     if (wantLeaf1 && leaf1Left > 0){
-      sectors[i] = { kind:"leaf1", label:"", fill:COLORS.leaf1, text:"#fff", icon:"leaf" };
+      sectors[i] = { kind:"leaf1", label:"", fill:COLORS.leaf1, text:"#111827", icon:"leaf" };
       leaf1Left--;
     } else if (!wantLeaf1 && leaf2Left > 0){
       sectors[i] = { kind:"leaf2", label:"", fill:COLORS.leaf2, text:"#fff", icon:"leaf" };
       leaf2Left--;
     } else {
       if (leaf1Left > 0){
-        sectors[i] = { kind:"leaf1", label:"", fill:COLORS.leaf1, text:"#fff", icon:"leaf" };
+        sectors[i] = { kind:"leaf1", label:"", fill:COLORS.leaf1, text:"#111827", icon:"leaf" };
         leaf1Left--;
       } else {
         sectors[i] = { kind:"leaf2", label:"", fill:COLORS.leaf2, text:"#fff", icon:"leaf" };
@@ -700,7 +732,9 @@
         ctx.rotate(Math.PI/2);
         drawVerticalChars(sec.label, 0, 82, sec.text);
       } else {
-        drawLeafIcon(0, 0, 0.9, "rgba(255,255,255,0.82)");
+        // лист на светлом leaf1 должен быть чуть темнее
+        const stroke = (sec.kind === "leaf1") ? "rgba(17,24,39,0.65)" : "rgba(255,255,255,0.82)";
+        drawLeafIcon(0, 0, 0.9, stroke);
       }
 
       ctx.restore();
@@ -739,7 +773,7 @@
     }
   }
 
-  // ---- spin cycle (таймер 6 -> спин -> фиксация -> таймер 6) ----
+  // цикл: таймер 6 -> спин -> фиксация -> таймер 6
   function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
   const SPIN_TURNS = 9;
   const SPIN_MS = 4200;
@@ -755,7 +789,7 @@
     const pointerWorld = -Math.PI/2;
     const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
 
-    let target = (pointerWorld - winnerCenter) - SPIN_TURNS * Math.PI * 2;
+    const target = (pointerWorld - winnerCenter) - SPIN_TURNS * Math.PI * 2;
 
     const start = angle;
     const end = target;
@@ -840,6 +874,7 @@
   // старт
   drawWheel(null);
   renderHistory();
+  updateUndoState();
   startCountdown();
 </script>
 </body>
