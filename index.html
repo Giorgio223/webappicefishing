@@ -8,8 +8,8 @@
 
   <style>
     :root{
-      --leaf1:#e6e8ec;   /* почти белый, сероватый */
-      --leaf2:#3d647f;   /* темный с голубым оттенком */
+      --leaf1:#e6e8ec;
+      --leaf2:#3d647f;
 
       --red:#e11d48;
       --orange:#fb923c;
@@ -32,7 +32,6 @@
         url("bg.png") center/cover no-repeat fixed;
     }
 
-    /* снег */
     .snow { pointer-events:none; position:fixed; inset:0; z-index:2; overflow:hidden; }
     .snow span{
       position:absolute; top:-10vh;
@@ -45,7 +44,6 @@
     }
     @keyframes fall{ from { transform: translateY(-10vh);} to { transform: translateY(110vh);} }
 
-    /* HUD */
     .leftHUD{
       position:fixed; left:12px; top:14px;
       display:flex; align-items:center; gap:10px;
@@ -73,7 +71,6 @@
       letter-spacing:.2px; margin-top:3px; font-size:11px;
     }
 
-    /* TON */
     .tonBtn{
       position:fixed; right:12px; top:14px; z-index:6;
       display:flex; align-items:center; gap:10px;
@@ -90,7 +87,6 @@
     .tonBtn img{ width:22px; height:22px; display:block; border-radius:6px; }
     .tonBtn:active{ transform: translateY(1px); }
 
-    /* колесо */
     .wheelWrap{
       position:fixed;
       left:50%;
@@ -103,7 +99,6 @@
     }
     canvas{ width:100%; height:100%; border-radius:50%; }
 
-    /* указатель */
     .pointer{
       position:absolute; top:-8px; left:50%;
       transform:translateX(-50%);
@@ -123,7 +118,6 @@
       opacity:.9;
     }
 
-    /* нижний блок */
     .bottomUI{
       position:fixed;
       left:50%;
@@ -136,7 +130,6 @@
       z-index:4;
     }
 
-    /* история */
     .historyBar{
       width:100%;
       display:flex; gap:6px;
@@ -172,7 +165,6 @@
     .chip.fish::before{ content:"🐟"; }
     .chip.leaf::before{ content:"🍃"; }
 
-    /* кнопки */
     .bonusPanel{ width:100%; display:flex; flex-direction:column; gap:10px; }
     .bonusTop, .bonusBottom{ display:flex; gap:8px; justify-content:space-between; }
 
@@ -230,7 +222,6 @@
       color:#0b1220;
     }
 
-    /* панель фишек + undo */
     .betRow{
       display:flex;
       justify-content:center;
@@ -284,7 +275,6 @@
     }
     .chev{ opacity:.75; font-weight:950; margin-left:6px; }
 
-    /* меню фишек открывается вверх */
     .betMenu{
       position:absolute;
       left:50%;
@@ -318,7 +308,6 @@
     .c05{ background:#f59e0b; color:#1b1b1b; }
     .c10{ background:#ef4444; color:#fff; }
 
-    /* TON панель */
     .modalOverlay{
       position:fixed;
       inset:0;
@@ -330,7 +319,6 @@
       z-index:20;
     }
     .modalOverlay.open{ display:flex; }
-
     .sheet{
       width:min(520px, 96vw);
       border-radius:22px 22px 0 0;
@@ -356,7 +344,6 @@
       gap:10px;
     }
     .sheetTitle img{ width:22px; height:22px; border-radius:6px; }
-
     .closeBtn{
       width:40px; height:40px;
       border-radius:999px;
@@ -366,7 +353,6 @@
       font-weight:950;
     }
     .closeBtn:active{ transform: translateY(1px); }
-
     .sheetBtns{
       display:flex;
       flex-direction:column;
@@ -465,7 +451,6 @@
     </div>
   </div>
 
-  <!-- TON панель -->
   <div class="modalOverlay" id="tonModal">
     <div class="sheet">
       <div class="sheetHeader">
@@ -493,14 +478,12 @@
     </div>
   </div>
 
-  <!-- TonConnect UI (будет работать, когда добавишь tonconnect-manifest.json в корень) -->
   <script type="module">
-    let tonUI = null;
     try{
       const mod = await import("https://esm.sh/@tonconnect/ui@2.0.10");
       const { TonConnectUI } = mod;
 
-      tonUI = new TonConnectUI({
+      const tonUI = new TonConnectUI({
         manifestUrl: `${location.origin}/tonconnect-manifest.json`
       });
 
@@ -517,8 +500,7 @@
         localStorage.setItem("walletAddress", addr);
         status.textContent = addr ? (addr.slice(0,6) + "..." + addr.slice(-6)) : "Connected";
       });
-    }catch(e){
-      // если manifest ещё не добавлен или сеть, просто остаёмся с заглушками
+    }catch{
       window.__tonUI = null;
     }
   </script>
@@ -527,7 +509,7 @@
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
 
-  // снег
+  // snow
   (function initSnow(){
     const box = document.getElementById("snow");
     const flakes = 26;
@@ -547,33 +529,25 @@
     }
   })();
 
-  // TON modal open/close
+  // TON modal
   const tonModal = document.getElementById("tonModal");
   document.getElementById("tonConnectBtn").addEventListener("click", () => tonModal.classList.add("open"));
   document.getElementById("tonClose").addEventListener("click", () => tonModal.classList.remove("open"));
   tonModal.addEventListener("click", (e) => { if (e.target === tonModal) tonModal.classList.remove("open"); });
 
-  // TON actions
   function showPopup(title, message){
     tg?.showPopup?.({ title, message, buttons:[{type:"ok"}] });
   }
 
   document.getElementById("actionBind").addEventListener("click", async () => {
-    // если TonConnect UI загружен — откроем модалку подключения
     if (window.__tonUI?.openModal){
       window.__tonUI.openModal();
       return;
     }
     showPopup("TON", "TonConnect ещё не активен. Нужен файл tonconnect-manifest.json в корне сайта.");
   });
-
-  document.getElementById("actionDeposit").addEventListener("click", () => {
-    showPopup("TON", "Депозит сделаем после подключения кошелька (следующий шаг).");
-  });
-
-  document.getElementById("actionWithdraw").addEventListener("click", () => {
-    showPopup("TON", "Вывод сделаем после подключения кошелька (следующий шаг).");
-  });
+  document.getElementById("actionDeposit").addEventListener("click", () => showPopup("TON", "Депозит — следующим шагом."));
+  document.getElementById("actionWithdraw").addEventListener("click", () => showPopup("TON", "Вывод — следующим шагом."));
 
   // --- BETS + UNDO ---
   let currentBet = 0.2;
@@ -582,8 +556,8 @@
   const betValue = document.getElementById("betValue");
   const undoBtn = document.getElementById("undoBtn");
 
-  const totals = new Map();     // target -> total
-  const actions = [];           // stack {target, amount}
+  const totals = new Map();
+  const actions = [];
 
   function fmt(x){
     const s = (Math.round(x*10)/10).toFixed(1);
@@ -595,7 +569,6 @@
   function toggleBetMenu(){ betMenu.classList.toggle("open"); }
 
   betSelect.addEventListener("click", (e) => { e.stopPropagation(); toggleBetMenu(); });
-
   betMenu.querySelectorAll(".betChip").forEach(chip => {
     chip.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -604,7 +577,6 @@
       closeBetMenu();
     });
   });
-
   document.addEventListener("click", () => closeBetMenu());
 
   function renderTotalOnButton(target){
@@ -644,15 +616,11 @@
   }
 
   undoBtn.addEventListener("click", (e) => { e.stopPropagation(); undoLast(); });
-
   document.querySelectorAll(".bettable").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      addBet(btn.dataset.target, currentBet);
-    });
+    btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
 
-  // --- WHEEL SETUP ---
+  // --- WHEEL ---
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -718,6 +686,8 @@
     const rel = normalize(pointerWorld - a - startOffset);
     return Math.floor(rel / step);
   }
+  function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
+
   function drawFishIcon(x,y,scale,fill){
     ctx.save();
     ctx.translate(x,y);
@@ -891,18 +861,16 @@
     }
   }
 
-  // --- Spin math (сильный спин к конкретному winnerIndex) ---
-  function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
+  // Strong spin to winnerIndex
   const TWO_PI = Math.PI * 2;
-  const SPIN_TURNS = 10;     // сила спина (обороты)
-  const SPIN_MS = 2600;      // длительность спина
+  const SPIN_TURNS = 10;
+  const SPIN_MS = 2600;
 
   function getDesiredModForWinner(winnerIdx){
     const pointerWorld = -Math.PI/2;
     const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
     return normalize(pointerWorld - winnerCenter);
   }
-
   function buildStrongTarget(winnerIdx){
     const desiredMod = getDesiredModForWinner(winnerIdx);
     const base = angle - SPIN_TURNS * TWO_PI;
@@ -910,7 +878,6 @@
     return desiredMod + k * TWO_PI;
   }
 
-  // HUD
   const hudMain = document.getElementById("hudMain");
   const hudSub  = document.getElementById("hudSub");
 
@@ -921,7 +888,7 @@
     }
   }
 
-  // History UI (внутреннее хранение: winnerIndex[])
+  // history rendering
   const historyBar = document.getElementById("historyBar");
   const history = [];
   const HISTORY_MAX = 18;
@@ -938,16 +905,15 @@
   }
 
   // ==========================
-  // SERVER SYNC (LIVE WHEEL)
+  // LIVE SYNC (FIXED)
   // ==========================
-  let timeOffset = 0;          // serverNow - Date.now()
+  let timeOffset = 0;
   let currentRoundId = null;
+  let scheduledForRoundId = null;
   let scheduledSpinTimer = null;
   let lastAppliedHistoryRoundId = null;
 
-  function serverTimeNow() {
-    return Date.now() + timeOffset;
-  }
+  function serverTimeNow() { return Date.now() + timeOffset; }
 
   async function fetchState() {
     const r = await fetch("/api/state", { cache: "no-store" });
@@ -955,7 +921,7 @@
     return await r.json();
   }
 
-  function setHUDCountdown(endAt) {
+  function setHUDCountdown(endAt){
     if (spinning) return;
     const leftMs = endAt - serverTimeNow();
     const sec = Math.max(0, Math.ceil(leftMs / 1000));
@@ -963,27 +929,31 @@
     hudSub.textContent = "до спина";
   }
 
-  function applyHistoryFromServer(historyArr) {
-    // historyArr: [{roundId,winnerIndex}...] старые->новые
+  function applyHistoryFromServer(state){
+    // показываем только завершённые раунды:
+    // если в history есть элемент с roundId == текущему roundId — убираем его
+    const filtered = (state.history || []).filter(h => h.roundId < state.round.roundId);
+
     history.length = 0;
-    const last = historyArr.slice(-HISTORY_MAX);
-    for (let i = last.length - 1; i >= 0; i--) {
-      history.unshift(last[i].winnerIndex);
-    }
+    const last = filtered.slice(-HISTORY_MAX);
+    for (const item of last) history.push(item.winnerIndex);
+
     renderHistory();
-    lastAppliedHistoryRoundId = last.length ? last[last.length - 1].roundId : null;
+    lastAppliedHistoryRoundId = filtered.length ? filtered[filtered.length - 1].roundId : null;
   }
 
-  function scheduleSpin(endAt, winnerIndex) {
+  function scheduleSpinAtEnd(endAt, winnerIndex, roundId){
     if (scheduledSpinTimer) clearTimeout(scheduledSpinTimer);
 
-    const delay = Math.max(0, (endAt - serverTimeNow()) - SPIN_MS);
+    const delay = Math.max(0, endAt - serverTimeNow()); // ✅ спин стартует на 0
     scheduledSpinTimer = setTimeout(() => {
       spinToWinner(winnerIndex);
     }, delay);
+
+    scheduledForRoundId = roundId;
   }
 
-  async function spinToWinner(winnerIndex) {
+  async function spinToWinner(winnerIndex){
     if (spinning) return;
     spinning = true;
     setHUDSpinning(true);
@@ -993,8 +963,8 @@
     const end = target;
     const t0 = performance.now();
 
-    await new Promise(resolve => {
-      function frame(now) {
+    await new Promise(resolve=>{
+      function frame(now){
         const t = Math.min(1, (now - t0) / SPIN_MS);
         const k = easeOutCubic(t);
         angle = start + (end - start) * k;
@@ -1007,43 +977,40 @@
 
     spinning = false;
     drawWheel(null);
-    // HUD вернётся в countdown при следующем syncLoop
+    // HUD вернется на countdown на следующем syncLoop
   }
 
-  async function syncLoop() {
-    try {
+  async function syncLoop(){
+    try{
       const state = await fetchState();
-
-      // sync time
       timeOffset = state.serverNow - Date.now();
 
       // history
-      if (state.history?.length) {
-        const lastHistRoundId = state.history[state.history.length - 1].roundId;
-        if (lastAppliedHistoryRoundId !== lastHistRoundId) {
-          applyHistoryFromServer(state.history);
-        }
+      const lastHist = (state.history && state.history.length) ? state.history[state.history.length - 1].roundId : null;
+      if (lastAppliedHistoryRoundId !== lastHist) {
+        applyHistoryFromServer(state);
       }
 
       // HUD
       setHUDCountdown(state.round.endAt);
 
-      // new round -> schedule spin
-      if (currentRoundId !== state.round.roundId) {
-        currentRoundId = state.round.roundId;
-        scheduleSpin(state.round.endAt, state.round.winnerIndex);
+      // schedule spin once per roundId
+      if (currentRoundId !== state.round.roundId) currentRoundId = state.round.roundId;
+
+      if (scheduledForRoundId !== state.round.roundId) {
+        scheduleSpinAtEnd(state.round.endAt, state.round.winnerIndex, state.round.roundId);
       }
-    } catch {
-      // ignore temporary errors
+    }catch{
+      // ignore
     }
   }
 
-  // старт
+  // init
   updateUndoState();
   drawWheel(null);
   renderHistory();
   syncLoop();
-  setInterval(syncLoop, 1000);
+  setInterval(syncLoop, 500); // чуть чаще для ровного 0
 </script>
 </body>
 </html>
