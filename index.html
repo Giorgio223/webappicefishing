@@ -9,11 +9,11 @@
   <style>
     :root{
       /* Сегменты */
-      --leaf1:#9aa7b5;   /* ✅ серо-голубой (ближе к серому) */
-      --leaf2:#6b86a3;   /* ✅ темнее серо-голубой */
+      --leaf1:#9aa7b5;   /* серо-голубой */
+      --leaf2:#7fe6ff;   /* ✅ ярко-голубой “как небо” */
       --red:#e11d48;
       --orange:#fb923c;
-      --blue:#0b2a8f;    /* LIL BLUES темнее */
+      --blue:#0b2a8f;
 
       --ring1:#0b1220;
     }
@@ -33,116 +33,69 @@
     }
 
     /* Снег */
-    .snow {
-      pointer-events:none;
-      position:fixed;
-      inset:0;
-      z-index:2;
-      overflow:hidden;
-    }
+    .snow { pointer-events:none; position:fixed; inset:0; z-index:2; overflow:hidden; }
     .snow span{
-      position:absolute;
-      top:-10vh;
-      width:6px;
-      height:6px;
+      position:absolute; top:-10vh;
+      width:6px; height:6px;
       background:rgba(255,255,255,.85);
       border-radius:50%;
       filter: blur(.2px);
       opacity:.85;
       animation: fall linear infinite;
     }
-    @keyframes fall{
-      from { transform: translateY(-10vh); }
-      to   { transform: translateY(110vh); }
-    }
+    @keyframes fall{ from { transform: translateY(-10vh); } to { transform: translateY(110vh); } }
 
     /* HUD слева */
     .leftHUD{
-      position:fixed;
-      left:12px; top:14px;
+      position:fixed; left:12px; top:14px;
       display:flex; align-items:center; gap:10px;
-      z-index:6;
-      user-select:none;
-      pointer-events:none;
+      z-index:6; user-select:none; pointer-events:none;
     }
     .cube{
-      width:34px; height:34px;
-      border-radius:10px;
+      width:34px; height:34px; border-radius:10px;
       background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(180,225,255,.75));
       border:1px solid rgba(0,0,0,.10);
       box-shadow: 0 10px 22px rgba(0,0,0,.14);
       position:relative;
     }
     .cube:after{
-      content:"";
-      position:absolute;
-      inset:7px 8px 12px 8px;
-      border-radius:8px;
-      border:1px solid rgba(255,255,255,.65);
-      opacity:.9;
+      content:""; position:absolute;
+      inset:7px 8px 12px 8px; border-radius:8px;
+      border:1px solid rgba(255,255,255,.65); opacity:.9;
     }
     .hudText{
-      font-weight:950;
-      letter-spacing:.6px;
-      color:#0b1220;
-      line-height:1;
-      min-width:160px;
-     _toggle:uppercase;
-      text-transform:uppercase;
+      font-weight:950; letter-spacing:.6px; color:#0b1220; line-height:1;
+      min-width:160px; text-transform:uppercase;
       text-shadow: 0 6px 18px rgba(0,0,0,.12);
     }
     .hudText small{
-      display:block;
-      font-weight:900;
-      opacity:.75;
-      letter-spacing:.2px;
-      margin-top:3px;
-      font-size:11px;
+      display:block; font-weight:900; opacity:.75;
+      letter-spacing:.2px; margin-top:3px; font-size:11px;
     }
 
-    /* ✅ TON connect кнопка справа сверху */
+    /* TON */
     .tonBtn{
-      position:fixed;
-      right:12px;
-      top:14px;
-      z-index:6;
-      display:flex;
-      align-items:center;
-      gap:10px;
-      padding:10px 12px;
-      border-radius:14px;
+      position:fixed; right:12px; top:14px; z-index:6;
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px; border-radius:14px;
       border:1px solid rgba(0,0,0,.12);
       background: rgba(255,255,255,.60);
       box-shadow: 0 12px 26px rgba(0,0,0,.16);
       backdrop-filter: blur(6px);
-      cursor:pointer;
-      user-select:none;
+      cursor:pointer; user-select:none;
       -webkit-tap-highlight-color: transparent;
-      text-decoration:none;
-      color:#0b1220;
-      font-weight:950;
-      letter-spacing:.2px;
+      text-decoration:none; color:#0b1220;
+      font-weight:950; letter-spacing:.2px;
     }
-    .tonBtn img{
-      width:22px;
-      height:22px;
-      display:block;
-      border-radius:6px;
-    }
-    .tonBtn:active{
-      transform: translateY(1px);
-    }
+    .tonBtn img{ width:22px; height:22px; display:block; border-radius:6px; }
+    .tonBtn:active{ transform: translateY(1px); }
 
     /* сцена */
     .stage{
-      position:absolute;
-      inset:0;
-      display:flex;
-      flex-direction:column;
-      justify-content:center;
-      align-items:center;
-      padding:18px;
-      gap:10px;
+      position:absolute; inset:0;
+      display:flex; flex-direction:column;
+      justify-content:center; align-items:center;
+      padding:18px; gap:10px;
       z-index:3;
     }
     .wheelWrap{
@@ -155,9 +108,7 @@
 
     /* указатель */
     .pointer{
-      position:absolute;
-      top:-8px;
-      left:50%;
+      position:absolute; top:-8px; left:50%;
       transform:translateX(-50%);
       width:0;height:0;
       border-left:16px solid transparent;
@@ -167,9 +118,7 @@
       pointer-events:none;
     }
     .pointer:after{
-      content:"";
-      position:absolute;
-      left:-10px; top:-28px;
+      content:""; position:absolute; left:-10px; top:-28px;
       width:0;height:0;
       border-left:10px solid transparent;
       border-right:10px solid transparent;
@@ -180,10 +129,8 @@
     /* История */
     .historyBar{
       width:min(430px, 92vw);
-      display:flex;
-      gap:6px;
-      justify-content:center;
-      align-items:center;
+      display:flex; gap:6px;
+      justify-content:center; align-items:center;
       padding:8px 10px;
       border-radius:999px;
       background: rgba(255,255,255,.55);
@@ -201,44 +148,116 @@
     }
     .chip::after{
       content:"";
-      position:absolute;
-      inset:4px;
+      position:absolute; inset:4px;
       border-radius:999px;
       background: rgba(255,255,255,.55);
       opacity:.55;
     }
-    .chip.fish::before{
-      content:"🐟";
+    .chip.fish::before, .chip.leaf::before{
       position:absolute; inset:0;
       display:flex; align-items:center; justify-content:center;
       font-size:11px;
+      content:"";
     }
-    .chip.leaf::before{
-      content:"🍃";
-      position:absolute; inset:0;
-      display:flex; align-items:center; justify-content:center;
-      font-size:11px;
-    }
+    .chip.fish::before{ content:"🐟"; }
+    .chip.leaf::before{ content:"🍃"; }
 
-    /* Панель кнопок */
+    /* Панель ставок/кнопок */
     .bonusPanel{
       width:min(430px, 92vw);
       display:flex;
       flex-direction:column;
-      gap:8px;
+      gap:10px;
     }
-    .bonusTop{
+
+    /* ✅ селектор ставки по центру под историей */
+    .betRow{
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      margin-top:2px;
+    }
+
+    .betSelect{
+      position:relative;
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 14px;
+      border-radius:999px;
+      border:1px solid rgba(0,0,0,.12);
+      background: rgba(255,255,255,.60);
+      box-shadow: 0 12px 26px rgba(0,0,0,.16);
+      backdrop-filter: blur(6px);
+      cursor:pointer;
+      user-select:none;
+      font-weight:950;
+      color:#0b1220;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .betHint{
+      font-size:11px;
+      font-weight:900;
+      opacity:.75;
+      letter-spacing:.2px;
+      margin-left:2px;
+    }
+    .chev{
+      opacity:.75;
+      font-weight:950;
+      margin-left:6px;
+    }
+
+    .betMenu{
+      position:absolute;
+      left:50%;
+      transform:translateX(-50%);
+      top:46px;
+      min-width:220px;
+      padding:10px;
+      border-radius:16px;
+      border:1px solid rgba(0,0,0,.12);
+      background: rgba(255,255,255,.80);
+      box-shadow: 0 18px 34px rgba(0,0,0,.22);
+      backdrop-filter: blur(8px);
+      display:none;
+      z-index:10;
+    }
+    .betMenu.open{ display:block; }
+    .betOptions{
       display:flex;
       gap:8px;
-      justify-content:space-between;
+      justify-content:center;
     }
-    .bonusBottom{
+    .betChip{
+      width:46px; height:46px;
+      border-radius:999px;
+      border:2px solid rgba(0,0,0,.12);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:950;
+      cursor:pointer;
+      user-select:none;
+      box-shadow: 0 10px 18px rgba(0,0,0,.14);
+    }
+    .betChip:active{ transform: translateY(1px); }
+
+    /* разные цвета фишек */
+    .c01{ background:#7c3aed; color:#fff; } /* фиолет */
+    .c02{ background:#22c55e; color:#0b1220; } /* зелёная */
+    .c05{ background:#f59e0b; color:#1b1b1b; } /* оранжевая */
+    .c10{ background:#ef4444; color:#fff; } /* красная */
+
+    /* кнопки выбора (кликабельные) */
+    .bonusTop, .bonusBottom{
       display:flex;
       gap:8px;
       justify-content:space-between;
     }
 
     .btn{
+      position:relative;
       border:1px solid rgba(0,0,0,.12);
       background: rgba(255,255,255,.55);
       border-radius:16px;
@@ -251,31 +270,26 @@
       gap:8px;
       font-weight:950;
       color:#0b1220;
+      cursor:pointer;
+      -webkit-tap-highlight-color: transparent;
+      overflow:hidden;
     }
+    .btn:active{ transform: translateY(1px); }
 
     .btn.small{
-      height:42px;
-      flex:1 1 0;
-      font-size:13px;
+      height:42px; flex:1 1 0; font-size:13px;
     }
     .btn.big{
-      height:58px;
-      flex:1 1 0;
-      font-size:12px;
-      text-transform:uppercase;
-      letter-spacing:.4px;
-      text-align:center;
-      padding:0 10px;
+      height:58px; flex:1 1 0; font-size:12px;
+      text-transform:uppercase; letter-spacing:.4px;
+      text-align:center; padding:0 10px;
     }
 
     .btnIcon{
-      width:26px;
-      height:26px;
+      width:26px; height:26px;
       border-radius:999px;
       background: rgba(255,255,255,.45);
-      display:flex;
-      align-items:center;
-      justify-content:center;
+      display:flex; align-items:center; justify-content:center;
       font-size:16px;
       border:1px solid rgba(0,0,0,.10);
     }
@@ -287,13 +301,29 @@
     .c-blue { background: color-mix(in srgb, var(--blue) 74%, white 26%); color:#fff; }
     .c-orange{ background: color-mix(in srgb, var(--orange) 74%, white 26%); color:#1b1b1b; }
     .c-red { background: color-mix(in srgb, var(--red) 74%, white 26%); color:#fff; }
+
+    /* ✅ маркер установленной ставки на кнопке */
+    .placedBet{
+      position:absolute;
+      right:8px;
+      top:8px;
+      width:28px;
+      height:28px;
+      border-radius:999px;
+      border:2px solid rgba(0,0,0,.12);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:11px;
+      font-weight:950;
+      box-shadow: 0 10px 18px rgba(0,0,0,.14);
+    }
   </style>
 </head>
 
 <body>
   <div class="snow" id="snow"></div>
 
-  <!-- ✅ TON connect -->
   <a class="tonBtn" href="javascript:void(0)" id="tonConnectBtn">
     <img src="ton.png" alt="TON" />
     TON connect
@@ -316,27 +346,46 @@
     <div class="historyBar" id="historyBar"></div>
 
     <div class="bonusPanel">
+      <!-- ✅ выбор ставки -->
+      <div class="betRow">
+        <div class="betSelect" id="betSelect">
+          <span id="betValue">0.2</span>
+          <span class="betHint">tap to change</span>
+          <span class="chev">▾</span>
+
+          <div class="betMenu" id="betMenu">
+            <div class="betOptions">
+              <div class="betChip c01" data-bet="0.1">0.1</div>
+              <div class="betChip c02" data-bet="0.2">0.2</div>
+              <div class="betChip c05" data-bet="0.5">0.5</div>
+              <div class="betChip c10" data-bet="1">1</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ✅ кликабельные ставки -->
       <div class="bonusTop">
-        <div class="btn small c-leaf1">
+        <div class="btn small c-leaf1 bettable" data-target="leaf1">
           <span class="btnIcon">🍃</span>
           Leaf 1
         </div>
-        <div class="btn small c-leaf2">
+        <div class="btn small c-leaf2 bettable" data-target="leaf2">
           <span class="btnIcon">🍃</span>
           Leaf 2
         </div>
       </div>
 
       <div class="bonusBottom">
-        <div class="btn big c-blue">
+        <div class="btn big c-blue bettable" data-target="lilblues">
           <span class="btnIcon">🐟</span>
           Lil Blues Bonus
         </div>
-        <div class="btn big c-orange">
+        <div class="btn big c-orange bettable" data-target="bigoranges">
           <span class="btnIcon">🐟</span>
           Big Oranges Bonus
         </div>
-        <div class="btn big c-red">
+        <div class="btn big c-red bettable" data-target="hugered">
           <span class="btnIcon">🐟</span>
           Huge Reds Bonus
         </div>
@@ -348,9 +397,8 @@
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
 
-  // TON connect (пока просто заглушка)
+  // TON (заглушка)
   document.getElementById("tonConnectBtn").addEventListener("click", () => {
-    // позже подключим TonConnect SDK — сейчас просто уведомление
     tg?.showPopup?.({ title: "TON", message: "TON Connect скоро будет подключен.", buttons: [{type:"ok"}] });
   });
 
@@ -374,7 +422,77 @@
     }
   })();
 
-  // ---------- КОЛЕСО ----------
+  // ---------- BET SELECT ----------
+  let currentBet = 0.2;
+
+  const betSelect = document.getElementById("betSelect");
+  const betMenu = document.getElementById("betMenu");
+  const betValue = document.getElementById("betValue");
+
+  function closeBetMenu(){ betMenu.classList.remove("open"); }
+  function toggleBetMenu(){ betMenu.classList.toggle("open"); }
+
+  betSelect.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleBetMenu();
+  });
+
+  betMenu.querySelectorAll(".betChip").forEach(chip => {
+    chip.addEventListener("click", (e) => {
+      e.stopPropagation();
+      currentBet = Number(chip.dataset.bet);
+      betValue.textContent = currentBet.toFixed(currentBet === 1 ? 0 : 1);
+      closeBetMenu();
+    });
+  });
+
+  document.addEventListener("click", () => closeBetMenu());
+
+  // ---------- PLACING BETS ON BUTTONS ----------
+  // хранит ставки по целям
+  const placed = new Map(); // target -> bet
+
+  function betColorClass(bet){
+    if (bet === 0.1) return "c01";
+    if (bet === 0.2) return "c02";
+    if (bet === 0.5) return "c05";
+    return "c10"; // 1
+  }
+
+  function renderPlaced(el, bet){
+    // удалить старую
+    const old = el.querySelector(".placedBet");
+    if (old) old.remove();
+
+    const p = document.createElement("div");
+    p.className = "placedBet " + betColorClass(bet);
+    p.textContent = String(bet);
+    el.appendChild(p);
+  }
+
+  function clearPlaced(el){
+    const old = el.querySelector(".placedBet");
+    if (old) old.remove();
+  }
+
+  document.querySelectorAll(".bettable").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const target = btn.dataset.target;
+
+      // повторный клик — снимаем
+      if (placed.has(target)){
+        placed.delete(target);
+        clearPlaced(btn);
+        return;
+      }
+      // иначе ставим текущую фишку
+      placed.set(target, currentBet);
+      renderPlaced(btn, currentBet);
+    });
+  });
+
+  // ---------- WHEEL ----------
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -420,9 +538,8 @@
     toggle++;
   }
 
-  // ---------- CANVAS ----------
   const canvas = document.getElementById("wheel");
-  const ctx2d = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d");
   const W = canvas.width, H = canvas.height;
   const cx = W/2, cy = H/2;
 
@@ -441,7 +558,6 @@
     const rel = normalize(pointerWorld - a - startOffset);
     return Math.floor(rel / step);
   }
-
   function rand01(){
     if (window.crypto?.getRandomValues){
       const u = new Uint32Array(1);
@@ -452,62 +568,62 @@
   }
 
   function drawFishIcon(x,y,scale,fill){
-    ctx2d.save();
-    ctx2d.translate(x,y);
-    ctx2d.scale(scale, scale);
-    ctx2d.fillStyle = fill;
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = fill;
 
-    ctx2d.beginPath();
-    ctx2d.ellipse(0, 0, 14, 9, 0, 0, Math.PI*2);
-    ctx2d.fill();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 14, 9, 0, 0, Math.PI*2);
+    ctx.fill();
 
-    ctx2d.beginPath();
-    ctx2d.moveTo(-14, 0);
-    ctx2d.lineTo(-26, -10);
-    ctx2d.lineTo(-26, 10);
-    ctx2d.closePath();
-    ctx2d.fill();
+    ctx.beginPath();
+    ctx.moveTo(-14, 0);
+    ctx.lineTo(-26, -10);
+    ctx.lineTo(-26, 10);
+    ctx.closePath();
+    ctx.fill();
 
-    ctx2d.fillStyle = "rgba(255,255,255,0.92)";
-    ctx2d.beginPath();
-    ctx2d.arc(8, -2, 2.2, 0, Math.PI*2);
-    ctx2d.fill();
-    ctx2d.restore();
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.beginPath();
+    ctx.arc(8, -2, 2.2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
   }
 
   function drawLeafIcon(x,y,scale,stroke){
-    ctx2d.save();
-    ctx2d.translate(x,y);
-    ctx2d.scale(scale, scale);
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.scale(scale, scale);
 
-    ctx2d.strokeStyle = stroke;
-    ctx2d.lineWidth = 2.6;
-    ctx2d.lineCap = "round";
-    ctx2d.lineJoin = "round";
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2.6;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
 
-    ctx2d.beginPath();
-    ctx2d.moveTo(0, 12);
-    ctx2d.quadraticCurveTo(18, 2, 0, -14);
-    ctx2d.quadraticCurveTo(-18, 2, 0, 12);
-    ctx2d.closePath();
-    ctx2d.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, 12);
+    ctx.quadraticCurveTo(18, 2, 0, -14);
+    ctx.quadraticCurveTo(-18, 2, 0, 12);
+    ctx.closePath();
+    ctx.stroke();
 
-    ctx2d.beginPath();
-    ctx2d.moveTo(0, 10);
-    ctx2d.lineTo(0, -12);
-    ctx2d.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, 10);
+    ctx.lineTo(0, -12);
+    ctx.stroke();
 
-    ctx2d.restore();
+    ctx.restore();
   }
 
   function drawVerticalChars(text, x, y, fill){
     const t = text.replace(/'/g,"").replace(/\s+/g," ").trim();
-    ctx2d.save();
-    ctx2d.translate(x,y);
-    ctx2d.fillStyle = fill;
-    ctx2d.font = "900 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-    ctx2d.textAlign = "center";
-    ctx2d.textBaseline = "middle";
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.fillStyle = fill;
+    ctx.font = "900 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
 
     const lineH = 11;
     const maxLen = 10;
@@ -515,41 +631,39 @@
     const totalH = (s.length-1)*lineH;
 
     for (let i=0;i<s.length;i++){
-      ctx2d.fillText(s[i], 0, -totalH/2 + i*lineH);
+      ctx.fillText(s[i], 0, -totalH/2 + i*lineH);
     }
-    ctx2d.restore();
+    ctx.restore();
   }
 
   function drawWheel(highlightIdx=null){
-    ctx2d.clearRect(0,0,W,H);
+    ctx.clearRect(0,0,W,H);
 
-    // лёд в центре
-    ctx2d.save();
-    const ice = ctx2d.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
+    ctx.save();
+    const ice = ctx.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
     ice.addColorStop(0, "rgba(255,255,255,0.96)");
     ice.addColorStop(0.55, "rgba(222,236,247,0.98)");
     ice.addColorStop(1, "rgba(184,205,224,0.96)");
-    ctx2d.fillStyle = ice;
-    ctx2d.beginPath();
-    ctx2d.arc(cx,cy,outerR*1.05,0,Math.PI*2);
-    ctx2d.fill();
-    ctx2d.restore();
+    ctx.fillStyle = ice;
+    ctx.beginPath();
+    ctx.arc(cx,cy,outerR*1.05,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
 
-    // обод
-    ctx2d.save();
-    const rimGrad = ctx2d.createRadialGradient(cx,cy,outerR*0.92, cx,cy,outerR*1.06);
+    ctx.save();
+    const rimGrad = ctx.createRadialGradient(cx,cy,outerR*0.92, cx,cy,outerR*1.06);
     rimGrad.addColorStop(0, "rgba(18,27,47,0.95)");
     rimGrad.addColorStop(1, "rgba(7,10,18,0.98)");
-    ctx2d.strokeStyle = rimGrad;
-    ctx2d.lineWidth = outerR*0.10;
-    ctx2d.beginPath();
-    ctx2d.arc(cx,cy,outerR*1.02,0,Math.PI*2);
-    ctx2d.stroke();
-    ctx2d.restore();
+    ctx.strokeStyle = rimGrad;
+    ctx.lineWidth = outerR*0.10;
+    ctx.beginPath();
+    ctx.arc(cx,cy,outerR*1.02,0,Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
 
-    ctx2d.save();
-    ctx2d.translate(cx,cy);
-    ctx2d.rotate(angle);
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(angle);
 
     for (let i=0;i<N;i++){
       const a0 = i*step + startOffset;
@@ -557,75 +671,75 @@
       const sec = sectors[i];
       const isHi = (highlightIdx===i);
 
-      ctx2d.beginPath();
-      ctx2d.moveTo(0,0);
-      ctx2d.arc(0,0, outerR*0.90, a0, a1);
-      ctx2d.closePath();
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      ctx.arc(0,0, outerR*0.90, a0, a1);
+      ctx.closePath();
 
-      ctx2d.fillStyle = sec.fill;
-      ctx2d.fill();
+      ctx.fillStyle = sec.fill;
+      ctx.fill();
 
       if (isHi){
-        ctx2d.fillStyle = "rgba(255,255,255,0.10)";
-        ctx2d.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.10)";
+        ctx.fill();
       }
 
-      ctx2d.strokeStyle = "rgba(255,255,255,0.20)";
-      ctx2d.lineWidth = 1.1;
-      ctx2d.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,0.20)";
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
 
       const mid = (a0+a1)/2;
       const iconR = outerR*0.82;
 
-      ctx2d.save();
-      ctx2d.rotate(mid);
-      ctx2d.translate(iconR, 0);
+      ctx.save();
+      ctx.rotate(mid);
+      ctx.translate(iconR, 0);
 
       if (sec.icon === "fish"){
         drawFishIcon(0, 0, 1.05, "rgba(255,255,255,0.92)");
-        ctx2d.rotate(Math.PI/2);
+        ctx.rotate(Math.PI/2);
         drawVerticalChars(sec.label, 0, 82, sec.text);
       } else {
         drawLeafIcon(0, 0, 0.9, "rgba(255,255,255,0.82)");
       }
 
-      ctx2d.restore();
+      ctx.restore();
     }
 
-    ctx2d.restore();
+    ctx.restore();
 
     if (spinning){
-      ctx2d.save();
-      ctx2d.translate(cx,cy);
+      ctx.save();
+      ctx.translate(cx,cy);
 
-      ctx2d.beginPath();
-      ctx2d.arc(0,0, innerR*1.55, 0, Math.PI*2);
-      ctx2d.fillStyle = "rgba(255,255,255,0.92)";
-      ctx2d.fill();
-      ctx2d.strokeStyle = "rgba(0,0,0,0.08)";
-      ctx2d.lineWidth = 10;
-      ctx2d.stroke();
+      ctx.beginPath();
+      ctx.arc(0,0, innerR*1.55, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.08)";
+      ctx.lineWidth = 10;
+      ctx.stroke();
 
-      ctx2d.beginPath();
-      ctx2d.arc(0,0, innerR*1.05, 0, Math.PI*2);
-      ctx2d.fillStyle = "rgba(240,250,255,0.96)";
-      ctx2d.fill();
-      ctx2d.strokeStyle = "rgba(0,0,0,0.10)";
-      ctx2d.lineWidth = 6;
-      ctx2d.stroke();
+      ctx.beginPath();
+      ctx.arc(0,0, innerR*1.05, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(240,250,255,0.96)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.10)";
+      ctx.lineWidth = 6;
+      ctx.stroke();
 
-      ctx2d.fillStyle = "rgba(11,18,32,0.90)";
-      ctx2d.font = `950 ${Math.floor(innerR*0.38)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-      ctx2d.textAlign = "center";
-      ctx2d.textBaseline = "middle";
-      ctx2d.fillText("ICE", 0, -innerR*0.18);
-      ctx2d.fillText("FISHING", 0, innerR*0.20);
+      ctx.fillStyle = "rgba(11,18,32,0.90)";
+      ctx.font = `950 ${Math.floor(innerR*0.38)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("ICE", 0, -innerR*0.18);
+      ctx.fillText("FISHING", 0, innerR*0.20);
 
-      ctx2d.restore();
+      ctx.restore();
     }
   }
 
-  // ---------- СПИН ----------
+  // ---- spin cycle (таймер 6 -> спин -> фиксация -> таймер 6) ----
   function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
   const SPIN_TURNS = 9;
   const SPIN_MS = 4200;
@@ -641,8 +755,7 @@
     const pointerWorld = -Math.PI/2;
     const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
 
-    let target = pointerWorld - winnerCenter;
-    target = target - SPIN_TURNS * Math.PI * 2;
+    let target = (pointerWorld - winnerCenter) - SPIN_TURNS * Math.PI * 2;
 
     const start = angle;
     const end = target;
@@ -669,7 +782,7 @@
     startCountdown();
   }
 
-  // ---------- HUD ----------
+  // HUD
   const hudMain = document.getElementById("hudMain");
   const hudSub  = document.getElementById("hudSub");
   let countdownTimer = null;
@@ -703,7 +816,7 @@
     }, 1000);
   }
 
-  // ---------- История ----------
+  // История
   const historyBar = document.getElementById("historyBar");
   const history = [];
   const HISTORY_MAX = 18;
@@ -713,7 +826,6 @@
     if (history.length > HISTORY_MAX) history.pop();
     renderHistory();
   }
-
   function renderHistory(){
     historyBar.innerHTML = "";
     for (const idx of history){
