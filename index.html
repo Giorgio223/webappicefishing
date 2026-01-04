@@ -60,3 +60,156 @@
       border-radius:50%;
       display:flex; justify-content:center; align-items:center;
       filter: drop-shadow(0 24px 40px rgba(0,0,0,.25));
+    }
+    canvas{
+      width:100%;
+      height:100%;
+      border-radius:50%;
+    }
+    /* “стрелка” как маленький язычок сверху */
+    .pointer{
+      position:absolute;
+      top:-6px;
+      width:0;height:0;
+      border-left:16px solid transparent;
+      border-right:16px solid transparent;
+      border-top:30px solid #111827;
+      filter: drop-shadow(0 10px 10px rgba(0,0,0,.25));
+    }
+    .pointer::after{
+      content:"";
+      position:absolute;
+      left:-10px; top:-28px;
+      width:0;height:0;
+      border-left:10px solid transparent;
+      border-right:10px solid transparent;
+      border-top:18px solid rgba(255,255,255,.9);
+      opacity:.85;
+    }
+
+    .result{
+      margin-top:12px;
+      background: rgba(255,255,255,.65);
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius:16px;
+      padding:12px 14px;
+      display:flex; justify-content:space-between; align-items:center;
+      box-shadow: 0 10px 25px rgba(0,0,0,.10);
+      color:#0b1220;
+      gap:12px;
+    }
+    .pill{
+      padding:6px 10px;
+      border-radius:999px;
+      font-weight:900;
+      font-size:12px;
+      background: rgba(11,18,32,.9);
+      color: rgba(255,255,255,.92);
+      border: 1px solid rgba(0,0,0,.15);
+      white-space:nowrap;
+    }
+    .small{font-size:12px; opacity:.75; font-weight:700;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hud">
+      <div class="title">🧊 ICE FISHING</div>
+      <div class="btns">
+        <button id="resetBtn">↺ Reset</button>
+        <button id="spinBtn" class="primary">▶ Spin</button>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="pointer"></div>
+      <canvas id="wheel" width="900" height="900"></canvas>
+    </div>
+
+    <div class="result">
+      <div>
+        <div style="font-weight:900">Результат: <span id="winText">—</span></div>
+        <div class="small">Сектор: <span id="winIdx">—</span></div>
+      </div>
+      <div class="pill" id="status">READY</div>
+    </div>
+  </div>
+
+<script>
+  // Telegram WebApp (не обязателен, но норм)
+  const tg = window.Telegram?.WebApp;
+  if (tg) { tg.ready(); tg.expand(); }
+
+  // ====== ДАННЫЕ КОЛЕСА: 53 ЯЧЕЙКИ ======
+  const N = 53;
+
+  // “Спец-сектора” с баннерами (как на скрине: несколько больших цветных)
+  // Можно потом переименовать на конкретные рыбы.
+  const specials = [
+    { label: "HUGE REDS",    color: "#d64545", text: "#ffffff", count: 1 },
+    { label: "BIG ORANGES",  color: "#f59e0b", text: "#1b1b1b", count: 2 },
+    { label: "LIL' BLUES",   color: "#2563eb", text: "#ffffff", count: 3 },
+  ];
+
+  // Заполним 53 сектора: большинство — обычные ледяные,
+  // часть — спец с баннером, распределим по кругу равномерно.
+  const sectors = Array.from({length:N}, (_,i)=>({ kind:"base", label:"" }));
+
+  function placeEvenly(kindObj, howMany){
+    // раскидываем по кругу примерно равномерно
+    for (let k=0;k<howMany;k++){
+      const pos = Math.floor((k+1) * (N/(howMany+1)));
+      // если занято — сдвигаем
+      let p = pos;
+      while (sectors[p]?.kind !== "base") p = (p+1)%N;
+      sectors[p] = { kind:"special", ...kindObj };
+    }
+  }
+
+  for (const s of specials) placeEvenly({label:s.label, color:s.color, text:s.text}, s.count);
+
+  // Если хочешь, чтобы базовые сектора тоже были “рыбы”, просто наполни массив:
+  // например: const baseFish = ["Окунь","Щука",...]; и ниже присваивай.
+  // Сейчас базовые — без текста (как на скрине: узкие голубые сектора с паттерном).
+  // Победу мы будем показывать: спец-лейбл или “Обычная рыба”.
+  function winName(sec){
+    if (sec.kind === "special") return sec.label;
+    return "Обычная рыба";
+  }
+
+  // ====== РЕНДЕР КОЛЕСА (Canvas) ======
+  const canvas = document.getElementById("wheel");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H/2;
+
+  const outerR = Math.min(W,H)*0.47;
+  const rimR   = outerR*1.00;
+  const innerR = outerR*0.22;
+
+  const step = (Math.PI*2)/N;
+
+  const spinBtn = document.getElementById("spinBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const winText = document.getElementById("winText");
+  const winIdx = document.getElementById("winIdx");
+  const status = document.getElementById("status");
+
+  let angle = 0;
+  let spinning = false;
+
+  function normalize(a){
+    const t = Math.PI*2;
+    return ((a%t)+t)%t;
+  }
+
+  // Pointer сверху (12 часов) => -PI/2
+  function indexAtPointer(a){
+    const pointerWorld = -Math.PI/2;
+    const rel = normalize(pointerWorld - a);
+    return Math.floor(rel / step);
+  }
+
+  // “сердечко/капля” паттерн как на скрине — рисуем маленькими символами
+  function drawPatternInSlice(a0, a1){
+    // делаем 2-3 ряда символов вдоль рад
