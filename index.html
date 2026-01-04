@@ -5,31 +5,59 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>IceFishing Wheel</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
   <style>
     :root{
-      --bg1:#eef4fb; --bg2:#cfddeb; /* более серо-голубой фон */
-
+      /* Цвета сегментов */
       --leaf1:#1677ff;   /* яркий синий */
       --leaf2:#7fe3ff;   /* яркий голубой */
-
       --red:#e11d48;
       --orange:#fb923c;
       --blue:#0b2a8f;    /* LIL BLUES темнее */
 
       --ring1:#0b1220;
     }
+
     *{box-sizing:border-box}
+
     body{
       margin:0;
       min-height:100vh;
-      background:
-        radial-gradient(900px 600px at 25% 15%, rgba(255,255,255,.92), rgba(255,255,255,0) 60%),
-        radial-gradient(1200px 900px at 70% 35%, rgba(255,255,255,.55), rgba(255,255,255,0) 65%),
-        radial-gradient(1400px 900px at 50% 70%, var(--bg1), var(--bg2));
       font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
       overflow:hidden;
+
+      /* ✅ ФОН ИЗ ФАЙЛА bg.png */
+      background:
+        radial-gradient(900px 600px at 25% 15%, rgba(255,255,255,.25), rgba(255,255,255,0) 60%),
+        radial-gradient(1200px 900px at 70% 35%, rgba(255,255,255,.18), rgba(255,255,255,0) 65%),
+        url("bg.png") center/cover no-repeat fixed;
     }
 
+    /* ✅ Снег поверх (дополнительный, красивый) */
+    .snow {
+      pointer-events:none;
+      position:fixed;
+      inset:0;
+      z-index:2;
+      overflow:hidden;
+    }
+    .snow span{
+      position:absolute;
+      top:-10vh;
+      width:6px;
+      height:6px;
+      background:rgba(255,255,255,.85);
+      border-radius:50%;
+      filter: blur(.2px);
+      opacity:.85;
+      animation: fall linear infinite;
+    }
+    @keyframes fall{
+      from { transform: translateY(-10vh); }
+      to   { transform: translateY(110vh); }
+    }
+
+    /* HUD слева */
     .leftHUD{
       position:fixed;
       left:12px; top:14px;
@@ -61,6 +89,7 @@
       line-height:1;
       min-width:160px;
       text-transform:uppercase;
+      text-shadow: 0 6px 18px rgba(0,0,0,.12);
     }
     .hudText small{
       display:block;
@@ -71,6 +100,7 @@
       font-size:11px;
     }
 
+    /* сцена */
     .stage{
       position:absolute;
       inset:0;
@@ -80,15 +110,17 @@
       align-items:center;
       padding:18px;
       gap:10px;
+      z-index:3;
     }
     .wheelWrap{
       position:relative;
       width:min(430px, 92vw);
       height:min(430px, 92vw);
-      filter: drop-shadow(0 26px 44px rgba(0,0,0,.25));
+      filter: drop-shadow(0 26px 44px rgba(0,0,0,.30));
     }
     canvas{ width:100%; height:100%; border-radius:50%; }
 
+    /* указатель */
     .pointer{
       position:absolute;
       top:-8px;
@@ -121,10 +153,11 @@
       align-items:center;
       padding:8px 10px;
       border-radius:999px;
-      background: rgba(255,255,255,.65);
+      background: rgba(255,255,255,.55);
       border: 1px solid rgba(0,0,0,.08);
-      box-shadow: 0 12px 26px rgba(0,0,0,.12);
+      box-shadow: 0 12px 26px rgba(0,0,0,.16);
       overflow:hidden;
+      backdrop-filter: blur(6px);
     }
     .chip{
       width:16px; height:16px;
@@ -155,7 +188,12 @@
     }
   </style>
 </head>
+
 <body>
+  <!-- снег -->
+  <div class="snow" id="snow"></div>
+
+  <!-- HUD -->
   <div class="leftHUD">
     <div class="cube"></div>
     <div class="hudText">
@@ -164,6 +202,7 @@
     </div>
   </div>
 
+  <!-- колесо -->
   <div class="stage">
     <div class="wheelWrap">
       <div class="pointer"></div>
@@ -174,14 +213,34 @@
 
 <script>
   const tg = window.Telegram?.WebApp;
-  if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor?.("#eef4fb"); }
+  if (tg) { tg.ready(); tg.expand(); }
 
-  // ====== 53 СЕКТОРА ======
+  // ---------- СНЕГ (лёгкий) ----------
+  (function initSnow(){
+    const box = document.getElementById("snow");
+    const flakes = 26; // не перегружаем
+    for (let i=0;i<flakes;i++){
+      const s = document.createElement("span");
+      const size = 2 + Math.random()*4;
+      s.style.width = size + "px";
+      s.style.height = size + "px";
+      s.style.left = (Math.random()*100) + "vw";
+      s.style.opacity = (0.35 + Math.random()*0.55).toFixed(2);
+      s.style.filter = `blur(${(Math.random()*0.9).toFixed(2)}px)`;
+      const dur = 6 + Math.random()*8;
+      const delay = Math.random()*-dur;
+      s.style.animationDuration = dur + "s";
+      s.style.animationDelay = delay + "s";
+      box.appendChild(s);
+    }
+  })();
+
+  // ---------- КОЛЕСО 53 ----------
   const N = 53;
-  const step = (Math.PI * 2) / N;
+  const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
 
-  // позиции (приближенно к часам)
+  // Позиции “как по часам”
   const IDX_HUGE = 0;
   const IDX_ORANGES = [13, 39];
   const IDX_BLUES   = [7, 20, 33, 46];
@@ -196,7 +255,6 @@
   };
 
   const sectors = Array.from({length:N}, ()=>null);
-
   sectors[IDX_HUGE] = { kind:"huge", label:"HUGE REDS", fill:COLORS.red, text:"#fff", icon:"fish" };
   for (const i of IDX_ORANGES) sectors[i] = { kind:"orange", label:"BIG ORANGES", fill:COLORS.orange, text:"#1b1b1b", icon:"fish" };
   for (const i of IDX_BLUES)   sectors[i] = { kind:"blue", label:"LIL BLUES", fill:COLORS.blue, text:"#fff", icon:"fish" };
@@ -225,7 +283,7 @@
     toggle++;
   }
 
-  // ====== CANVAS ======
+  // ---------- CANVAS ----------
   const canvas = document.getElementById("wheel");
   const ctx = canvas.getContext("2d");
   const W = canvas.width, H = canvas.height;
@@ -247,7 +305,7 @@
     return Math.floor(rel / step);
   }
 
-  // ==== крипто-рандом (чтобы не было заметного чередования) ====
+  // Крипто-рандом
   function rand01(){
     if (window.crypto?.getRandomValues){
       const u = new Uint32Array(1);
@@ -257,7 +315,7 @@
     return Math.random();
   }
 
-  // ==== ICONS ====
+  // Иконки
   function drawFishIcon(x,y,scale,fill){
     ctx.save();
     ctx.translate(x,y);
@@ -307,18 +365,19 @@
     ctx.restore();
   }
 
-  // ==== вертикальный текст, ниже и после рыбки ====
+  // Вертикальный текст: меньше и ниже, начинается после рыбки
   function drawVerticalChars(text, x, y, fill){
     const t = text.replace(/'/g,"").replace(/\s+/g," ").trim();
+
     ctx.save();
     ctx.translate(x,y);
     ctx.fillStyle = fill;
-    ctx.font = "900 16px system-ui, -apple-system, Segoe UI, Roboto, Arial"; // меньше
+    ctx.font = "900 14px system-ui, -apple-system, Segoe UI, Roboto, Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    const lineH = 14; // компактнее
-    const maxLen = 10; // чтобы точно не вылезало
+    const lineH = 12;
+    const maxLen = 10;
     const s = t.slice(0, maxLen);
     const totalH = (s.length-1)*lineH;
 
@@ -331,7 +390,7 @@
   function drawWheel(highlightIdx=null){
     ctx.clearRect(0,0,W,H);
 
-    // фон колеса (серо-голубой лед)
+    // серо-голубой лёд внутри колеса
     ctx.save();
     const ice = ctx.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
     ice.addColorStop(0, "rgba(255,255,255,0.96)");
@@ -384,7 +443,7 @@
 
       const mid = (a0+a1)/2;
 
-      // Иконка максимально ближе к краю
+      // Иконка ближе к внешнему краю
       const iconR = outerR*0.82;
 
       ctx.save();
@@ -394,11 +453,9 @@
       if (sec.icon === "fish"){
         drawFishIcon(0, 0, 1.05, "rgba(255,255,255,0.92)");
 
-        // ТЕКСТ ниже рыбки (смещение по “вертикали” после поворота)
-        // Для этого повернём локальную систему так, чтобы "низ" был вдоль радиуса к центру.
+        // Текст еще НИЖЕ: было 28/52, ставим 62 чтобы точно не налезал
         ctx.rotate(Math.PI/2);
-        // y = +20 => вниз после рыбки
-        drawVerticalChars(sec.label, 0, 28, sec.text);
+        drawVerticalChars(sec.label, 0, 62, sec.text);
       } else {
         drawLeafIcon(0, 0, 0.9, "rgba(255,255,255,0.82)");
       }
@@ -456,7 +513,7 @@
     ctx.restore();
   }
 
-  // ====== СПИН: фиксированный каждый раз ======
+  // ---------- СПИН: одинаковая сила, потом стоп, потом 6 сек ----------
   function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
 
   const SPIN_TURNS = 9;
@@ -499,18 +556,18 @@
       requestAnimationFrame(frame);
     });
 
-    // фиксируем результат и записываем в историю
+    // ✅ фиксируем, добавляем историю, и ТОЛЬКО ПОТОМ стартуем новый 6-сек цикл
     const finalIdx = indexAtPointer(angle);
     addHistory(finalIdx);
 
     spinning = false;
-    // после фиксации начинаем новый отсчёт 6 сек
-    startCountdown();
     setHUDSpinning(false);
     drawWheel(null);
+
+    startCountdown(); // новый отсчет только после фиксации
   }
 
-  // ====== HUD: цикл "фиксировали -> 6..0 -> spin" ======
+  // ---------- HUD цикл ----------
   const hudMain = document.getElementById("hudMain");
   const hudSub  = document.getElementById("hudSub");
   let countdownTimer = null;
@@ -544,7 +601,7 @@
     }, 1000);
   }
 
-  // ====== История ======
+  // ---------- История ----------
   const historyBar = document.getElementById("historyBar");
   const history = [];
   const HISTORY_MAX = 18;
