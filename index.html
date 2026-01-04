@@ -9,14 +9,14 @@
     :root{
       --bg1:#eef7ff; --bg2:#cfe6ff;
 
-      --ring1:#0b1220; --ring2:#121b2f;
+      --leaf1:#2f86ff;   /* яркий синий */
+      --leaf2:#8fe6ff;   /* яркий голубой */
 
-      --leaf1:#3f4752;  /* темно-серый */
-      --leaf2:#9aa3b1;  /* светло-серый */
-
-      --red:#d64545;
-      --orange:#f59e0b;
+      --red:#e11d48;
+      --orange:#fb923c;
       --blue:#2563eb;
+
+      --ring1:#0b1220;
     }
     *{box-sizing:border-box}
     body{
@@ -30,7 +30,6 @@
       overflow:hidden;
     }
 
-    /* левый блок (таймер/название) */
     .leftHUD{
       position:fixed;
       left:12px; top:14px;
@@ -60,7 +59,8 @@
       letter-spacing:.6px;
       color:#0b1220;
       line-height:1;
-      min-width:140px;
+      min-width:160px;
+      text-transform:uppercase;
     }
     .hudText small{
       display:block;
@@ -71,14 +71,15 @@
       font-size:11px;
     }
 
-    /* сцена */
     .stage{
       position:absolute;
       inset:0;
       display:flex;
+      flex-direction:column;
       justify-content:center;
       align-items:center;
       padding:18px;
+      gap:10px;
     }
     .wheelWrap{
       position:relative;
@@ -86,13 +87,8 @@
       height:min(430px, 92vw);
       filter: drop-shadow(0 26px 44px rgba(0,0,0,.25));
     }
-    canvas{
-      width:100%;
-      height:100%;
-      border-radius:50%;
-    }
+    canvas{ width:100%; height:100%; border-radius:50%; }
 
-    /* указатель сверху */
     .pointer{
       position:absolute;
       top:-8px;
@@ -101,7 +97,7 @@
       width:0;height:0;
       border-left:16px solid transparent;
       border-right:16px solid transparent;
-      border-top:30px solid #0b1220;
+      border-top:30px solid var(--ring1);
       filter: drop-shadow(0 10px 10px rgba(0,0,0,.25));
       pointer-events:none;
     }
@@ -115,12 +111,54 @@
       border-top:18px solid rgba(255,255,255,.92);
       opacity:.9;
     }
+
+    /* История снизу */
+    .historyBar{
+      width:min(430px, 92vw);
+      display:flex;
+      gap:6px;
+      justify-content:center;
+      align-items:center;
+      padding:8px 10px;
+      border-radius:999px;
+      background: rgba(255,255,255,.65);
+      border: 1px solid rgba(0,0,0,.08);
+      box-shadow: 0 12px 26px rgba(0,0,0,.12);
+      overflow:hidden;
+    }
+    .chip{
+      width:16px; height:16px;
+      border-radius:999px;
+      border:1px solid rgba(0,0,0,.12);
+      flex:0 0 auto;
+      position:relative;
+    }
+    .chip::after{
+      content:"";
+      position:absolute;
+      inset:4px;
+      border-radius:999px;
+      background: rgba(255,255,255,.55);
+      opacity:.55;
+    }
+    .chip.fish::before{
+      content:"🐟";
+      position:absolute; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      font-size:11px;
+    }
+    .chip.leaf::before{
+      content:"🍃";
+      position:absolute; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      font-size:11px;
+    }
   </style>
 </head>
 <body>
   <div class="leftHUD">
     <div class="cube"></div>
-    <div class="hudText" id="hudText">
+    <div class="hudText">
       <span id="hudMain">6</span>
       <small id="hudSub">до спина</small>
     </div>
@@ -131,21 +169,26 @@
       <div class="pointer"></div>
       <canvas id="wheel" width="900" height="900"></canvas>
     </div>
+    <div class="historyBar" id="historyBar" aria-label="history"></div>
   </div>
 
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor?.("#eef7ff"); }
 
-  // ====== 53 СЕКТОРА С ТОЧНЫМ РАСПРЕДЕЛЕНИЕМ ======
+  // ====== СИНХРОНИЗАЦИЯ “каждые 6 секунд” (пока локально по времени) ======
+  // ВАЖНО: чтобы у всех было 100% одинаково — нужен сервер (следующий шаг).
+  const PERIOD_MS = 6000;
+
+  // ====== 53 СЕКТОРА ======
   const N = 53;
   const step = (Math.PI * 2) / N;
-  const startOffset = -Math.PI/2; // сектор 0 — на 12 часов
+  const startOffset = -Math.PI/2;
 
-  // Позиции "как по часам" (приближенно для 53)
-  const IDX_HUGE = 0;                 // 12:00
-  const IDX_ORANGES = [13, 39];       // 3:00 и 9:00
-  const IDX_BLUES   = [7, 20, 33, 46];// 1:30, 4:30, 7:30, 10:30
+  // позиции (как раньше)
+  const IDX_HUGE = 0;
+  const IDX_ORANGES = [13, 39];
+  const IDX_BLUES   = [7, 20, 33, 46];
 
   const css = getComputedStyle(document.documentElement);
   const COLORS = {
@@ -162,7 +205,7 @@
   for (const i of IDX_ORANGES) sectors[i] = { kind:"orange", label:"BIG ORANGES", fill:COLORS.orange, text:"#1b1b1b", icon:"fish" };
   for (const i of IDX_BLUES)   sectors[i] = { kind:"blue", label:"LIL' BLUES", fill:COLORS.blue, text:"#fff", icon:"fish" };
 
-  // 46 обычных: 23 leaf1 и 23 leaf2, чередуются
+  // 46 leafs: 23/23, alternating
   let leaf1Left = 23, leaf2Left = 23;
   let toggle = 0;
   for (let i=0;i<N;i++){
@@ -202,15 +245,13 @@
     const t = Math.PI*2;
     return ((a%t)+t)%t;
   }
-
   function indexAtPointer(a){
-    // pointerWorld = -PI/2, startOffset = -PI/2 => при angle=0 индекс 0 сверху
     const pointerWorld = -Math.PI/2;
     const rel = normalize(pointerWorld - a - startOffset);
     return Math.floor(rel / step);
   }
 
-  // ==== ИКОНКИ ====
+  // ==== ICONS (рисуем на canvas, ближе к внешнему краю) ====
   function drawFishIcon(x,y,scale,fill){
     ctx.save();
     ctx.translate(x,y);
@@ -228,7 +269,7 @@
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
     ctx.beginPath();
     ctx.arc(8, -2, 2.2, 0, Math.PI*2);
     ctx.fill();
@@ -261,16 +302,28 @@
     ctx.restore();
   }
 
-  // ==== РИСОВАНИЕ ====
-  function roundRect(x,y,w,h,r){
-    const rr = Math.min(r, w/2, h/2);
-    ctx.beginPath();
-    ctx.moveTo(x+rr,y);
-    ctx.arcTo(x+w,y,x+w,y+h,rr);
-    ctx.arcTo(x+w,y+h,x,y+h,rr);
-    ctx.arcTo(x,y+h,x,y,rr);
-    ctx.arcTo(x,y,x+w,y,rr);
-    ctx.closePath();
+  // ==== БОНУСНЫЙ ТЕКСТ: ВЕРТИКАЛЬНО ПО СЕКТОРУ, НЕ ВЫЛЕЗАЕТ ====
+  // Мы НЕ “крутим” текст на 90 градусов (как раньше), потому что он становился горизонтальным.
+  // Тут делаем: rotate(mid) -> translate(r) -> rotate(mid + 90) НЕ НУЖНО.
+  // Правильнее: rotate(mid) затем rotate(PI/2) чтобы текст был вдоль радиуса? Нет.
+  // Нужно "вдоль сектора" = вдоль радиуса наружу-внутрь? Обычно это вертикально (сверху вниз) по лучу.
+  // Сделаем текст вдоль радиуса: rotate(mid) -> translate(r) -> rotate(PI/2) и пишем ПО БУКВАМ вниз.
+  function drawVerticalText(text, x, y, maxChars, fill){
+    // Рисуем по буквам вниз (вертикально)
+    const t = text.slice(0, maxChars);
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.fillStyle = fill;
+    ctx.font = "900 20px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    const lineH = 18;
+    const totalH = (t.length-1)*lineH;
+    for (let i=0;i<t.length;i++){
+      ctx.fillText(t[i], 0, -totalH/2 + i*lineH);
+    }
+    ctx.restore();
   }
 
   function drawWheel(highlightIdx=null){
@@ -311,68 +364,54 @@
       const sec = sectors[i];
       const isHi = (highlightIdx===i);
 
-      // сектор
       ctx.beginPath();
       ctx.moveTo(0,0);
       ctx.arc(0,0, outerR*0.90, a0, a1);
       ctx.closePath();
 
-      // БОНУСЫ: заливка целиком цветом (как ты просил)
-      // Обычные: серые (чередование)
-      let fill = sec.fill;
-
-      // лёгкий “ледяной” блик поверх всех
-      ctx.fillStyle = fill;
+      ctx.fillStyle = sec.fill;
       ctx.fill();
 
-      // мягкая подсветка
       if (isHi){
         ctx.fillStyle = "rgba(255,255,255,0.10)";
         ctx.fill();
       }
 
-      // разделители
-      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.strokeStyle = "rgba(255,255,255,0.20)";
       ctx.lineWidth = 1.1;
       ctx.stroke();
 
-      // Иконки ближе к внешнему краю (вверх сектора)
       const mid = (a0+a1)/2;
-      const iconR = outerR*0.74; // было ближе к центру — теперь ближе к краю
 
+      // Иконка ближе к краю
+      const iconR = outerR*0.80;
       ctx.save();
       ctx.rotate(mid);
       ctx.translate(iconR, 0);
-      ctx.rotate(Math.PI/2);
 
+      // Иконки должны быть “ближе к верхней части сектора” — это как раз ближе к внешнему радиусу.
       if (sec.icon === "fish"){
+        // чуть смещаем к концу сектора (вверх)
         drawFishIcon(0, 0, 1.05, "rgba(255,255,255,0.92)");
       } else {
-        drawLeafIcon(0, 0, 0.9, "rgba(255,255,255,0.78)");
+        drawLeafIcon(0, 0, 0.9, "rgba(255,255,255,0.80)");
       }
-      ctx.restore();
 
-      // Текст внутри БОНУСНЫХ ячеек (вписан в сектор)
+      // Текст бонусов: вертикально по сектору и не вылезает
       if (sec.kind === "huge" || sec.kind === "orange" || sec.kind === "blue"){
-        const textR = outerR*0.60; // текст чуть ниже иконки, но всё ещё ближе к краю чем к центру
-        ctx.save();
-        ctx.rotate(mid);
-        ctx.translate(textR, 0);
+        // Смещаем текст чуть внутрь от иконки, но всё ещё ближе к краю
+        const textR = -outerR*0.10;
+        // Поворачиваем так, чтобы вертикальный текст “вдоль луча”
         ctx.rotate(Math.PI/2);
-
-        ctx.fillStyle = sec.text;
-        ctx.font = "900 26px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(sec.label, 0, 0);
-
-        ctx.restore();
+        drawVerticalText(sec.label, 0, textR, 10, sec.text);
       }
+
+      ctx.restore();
     }
 
     ctx.restore();
 
-    // центр — только когда вращается: "ICE FISHING"
+    // центр: только во время спина
     if (spinning){
       ctx.save();
       ctx.translate(cx,cy);
@@ -403,7 +442,7 @@
       ctx.restore();
     }
 
-    // “болтики” на ободе
+    // “болтики”
     ctx.save();
     ctx.translate(cx,cy);
     const bolts = 18;
@@ -420,44 +459,45 @@
     ctx.restore();
   }
 
-  // ====== АВТО-СПИН КАЖДЫЕ 6 СЕК ======
+  // ====== АНИМАЦИЯ: КАЖДЫЙ СПИН ОДИНАКОВО СИЛЬНЫЙ ======
   function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
 
-  function pickWinnerIndex(){
-    // пока равновероятно по 53
-    return Math.floor(Math.random()*N);
+  // фиксируем параметры каждого спина (одинаковое "ощущение"):
+  const SPIN_TURNS = 9;        // всегда одинаковое число оборотов
+  const SPIN_MS = 4200;        // всегда одинаковая длительность
+  const JITTER = 0.18;         // небольшой джиттер внутри сектора (доля шага)
+
+  function pickWinnerIndexForTick(tick){
+    // Пока локально: псевдо-рандом от tick (чтобы при обновлении было примерно одинаково на одном устройстве)
+    // Для 100% одинаково у всех — заменим на серверный результат.
+    let x = tick * 1103515245 + 12345;
+    x = (x >>> 0);
+    return x % N;
   }
 
-  async function spin(){
-    if (spinning) return;
+  async function spinToWinner(winnerIdx){
     spinning = true;
     setHUDModeSpinning(true);
 
-    const winner = pickWinnerIndex();
-
-    // хотим победителя под указатель (верх)
     const pointerWorld = -Math.PI/2;
-    const winnerCenter = (winner + 0.5)*step + startOffset;
+    const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
     let target = pointerWorld - winnerCenter;
 
-    const extraTurns = 7 + Math.floor(Math.random()*4); // 7–10
-    const jitter = (Math.random()-0.5)*step*0.25;
-    target = target + jitter - extraTurns*Math.PI*2;
+    // одинаковое количество оборотов ВСЕГДА
+    const jitter = (pseudoRand01() - 0.5) * step * JITTER;
+    target = target + jitter - SPIN_TURNS * Math.PI * 2;
 
     const start = angle;
     const end = target;
-
-    const duration = 4200; // чтобы уложиться и оставалось время до следующего спина
     const t0 = performance.now();
 
     await new Promise(resolve=>{
       function frame(now){
-        const t = Math.min(1,(now-t0)/duration);
+        const t = Math.min(1,(now-t0)/SPIN_MS);
         const k = easeOutCubic(t);
         angle = start + (end-start)*k;
 
-        const hi = indexAtPointer(angle);
-        drawWheel(hi);
+        drawWheel(indexAtPointer(angle));
 
         if (t<1) requestAnimationFrame(frame);
         else resolve();
@@ -468,46 +508,88 @@
     spinning = false;
     setHUDModeSpinning(false);
     drawWheel(null);
+
+    const finalIdx = indexAtPointer(angle);
+    addHistory(finalIdx);
   }
 
-  // ====== HUD: таймер vs ICE FISHING ======
+  // простой PRNG для jitter (чтобы не зависеть от Math.random прыжками)
+  let prngState = 123456789;
+  function pseudoRand01(){
+    prngState = (1664525 * prngState + 1013904223) >>> 0;
+    return prngState / 4294967296;
+  }
+
+  // ====== HUD (таймер общий) ======
   const hudMain = document.getElementById("hudMain");
   const hudSub  = document.getElementById("hudSub");
-
-  let countdown = 6;
-  let timerId = null;
 
   function setHUDModeSpinning(isSpin){
     if (isSpin){
       hudMain.textContent = "ICE FISHING";
       hudSub.textContent = "spinning";
     } else {
-      hudMain.textContent = String(countdown);
       hudSub.textContent = "до спина";
     }
   }
 
-  function startCountdownLoop(){
-    // каждые 1 сек обновляем цифру
-    timerId = setInterval(async ()=>{
-      if (spinning) return; // во время спина HUD уже ICE FISHING
-      countdown -= 1;
-      if (countdown <= 0){
-        countdown = 6; // сразу сброс на следующий цикл
-        // запускаем спин
-        spin();
-      }
-      setHUDModeSpinning(false);
-    }, 1000);
+  // вычисляем сколько секунд до следующего глобального тика каждые 6 сек
+  function secondsToNextTick(nowMs){
+    const mod = nowMs % PERIOD_MS;
+    const left = PERIOD_MS - mod;
+    return Math.ceil(left / 1000);
   }
 
-  // старт: отрисовать и запустить
-  drawWheel(null);
-  startCountdownLoop();
+  let lastTick = null;
 
-  // чтобы сразу через 6 секунд первый спин (и показалось что “живое”)
-  // если хочешь первый спин сразу — раскомментируй:
-  // spin();
+  function loop(){
+    const now = Date.now();
+    const tick = Math.floor(now / PERIOD_MS);
+
+    // таймер всегда "глобальный" по эпохе, а не от перезагрузки страницы
+    if (!spinning){
+      hudMain.textContent = String(secondsToNextTick(now));
+    }
+
+    // Если тик сменился — делаем спин
+    if (!spinning && tick !== lastTick){
+      lastTick = tick;
+      const winner = pickWinnerIndexForTick(tick);
+      // Чтобы каждый тик начинался синхронно, даём маленький сдвиг до границы тика:
+      // (мы уже на новом тике, запускаем сразу)
+      spinToWinner(winner);
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  // ====== История снизу ======
+  const historyBar = document.getElementById("historyBar");
+  const history = []; // последние N выпадений
+  const HISTORY_MAX = 18;
+
+  function addHistory(idx){
+    history.unshift(idx);
+    if (history.length > HISTORY_MAX) history.pop();
+    renderHistory();
+  }
+
+  function renderHistory(){
+    historyBar.innerHTML = "";
+    for (const idx of history){
+      const sec = sectors[idx];
+      const el = document.createElement("div");
+      el.className = "chip " + (sec.icon === "fish" ? "fish" : "leaf");
+      el.style.background = sec.fill;
+      historyBar.appendChild(el);
+    }
+  }
+
+  // старт
+  drawWheel(null);
+  lastTick = Math.floor(Date.now() / PERIOD_MS);
+  renderHistory();
+  requestAnimationFrame(loop);
 </script>
 </body>
 </html>
