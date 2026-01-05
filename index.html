@@ -741,29 +741,34 @@ window.addEventListener("wallet_changed", async () => {
     }
   });
 
-  async function waitAndCredit(intentId, address){
-    for (let i=0;i<20;i++){
-      const r = await fetch("/api/confirm_deposit", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ intentId, address })
-      });
-      if (r.ok){
-        const j = await r.json();
-        if (j.status === "credited"){
-          await refreshBalance();
-          showPopup("TON", `Баланс пополнен: +${j.creditedTon} TON`);
-          return;
-        }
+async function waitAndCredit(intentId, address){
+  // ✅ всегда кредитим баланс именно кошелька пользователя (TonConnect)
+  const userAddr = (typeof getWalletAddress === "function" ? getWalletAddress() : "") || "";
+  const creditAddr = userAddr || address;
+
+  for (let i=0;i<20;i++){
+    const r = await fetch("/api/confirm_deposit", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ intentId, address: creditAddr })
+    });
+
+    if (r.ok){
+      const j = await r.json();
+      if (j.status === "credited"){
+        await refreshBalance();
+        showPopup("TON", `Баланс пополнен: +${j.creditedTon} TON`);
+        return;
       }
-      await sleep(2000);
+      // можно показать статус ожидания
+      // if (j.status === "wait") console.log("wait", j.retryAfterMs);
     }
-    showPopup("TON", "Не удалось подтвердить депозит (TonAPI может тормозить). Попробуй ещё раз позже.");
+
+    await sleep(2000);
   }
 
-  document.getElementById("actionWithdraw").addEventListener("click", () => {
-    showPopup("TON", "Вывод добавим следующим шагом.");
-  });
+  showPopup("TON", "Не удалось подтвердить депозит. Попробуй ещё раз позже.");
+}
 
   // --- BETS + UNDO + BALANCE RULES ---
   let currentBet = 0.2;
