@@ -7,7 +7,6 @@ const redis = new Redis({
 
 const TONAPI_KEY = process.env.TONAPI_KEY;
 const TREASURY = process.env.TREASURY_TON_ADDRESS;
-
 const MIN_WAIT_MS = 45_000;
 
 async function tonapiGet(path) {
@@ -21,14 +20,6 @@ async function tonapiGet(path) {
   return j;
 }
 
-function extractComment(inMsg) {
-  if (!inMsg) return "";
-  if (typeof inMsg.message === "string" && inMsg.message.trim()) return inMsg.message.trim();
-  const db = inMsg.decoded_body;
-  if (db && typeof db.text === "string" && db.text.trim()) return db.text.trim();
-  return "";
-}
-
 export default async function handler(req, res) {
   try {
     res.setHeader("Cache-Control", "no-store");
@@ -38,10 +29,13 @@ export default async function handler(req, res) {
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
     const intentId = String(body.intentId || "").trim();
-    const userWallet = String(body.address || "").trim(); // ключ баланса пользователя (EQ/UQ)
-    const debug = Boolean(body.debug);
-
+    const userWallet = String(body.address || "").trim(); // ✅ должны прислать UQ/EQ
     if (!intentId || !userWallet) return res.status(400).json({ error: "bad_request" });
+
+    // ✅ запрещаем raw ключи bal:0:...
+    if (userWallet.startsWith("0:")) {
+      return res.status(400).json({ error: "bad_wallet_format", message: "Use friendly UQ/EQ address" });
+    }
 
     const intentRaw = await redis.get(`dep:intent:${intentId}`);
     if (!intentRaw) return res.status(404).json({ error: "intent_not_found" });
@@ -50,7 +44,6 @@ export default async function handler(req, res) {
 
     const createdAt = Number(intent.createdAt || 0);
     const age = Date.now() - createdAt;
-
     if (createdAt && age < MIN_WAIT_MS) {
       return res.status(200).json({ status: "wait", retryAfterMs: MIN_WAIT_MS - age });
     }
@@ -62,71 +55,29 @@ export default async function handler(req, res) {
     }
 
     const wantAmountNano = String(intent.amountNano || "0");
-    const wantComment = String(intent.comment || "").trim();
     const createdAtSec = createdAt ? Math.floor(createdAt / 1000) : 0;
 
-    // Берём больше, чтобы не “промахнуться” по лимиту
-    const txs = await tonapiGet(
-      `/blockchain/accounts/${encodeURIComponent(TREASURY)}/transactions?limit=120`
-    );
-
+    const txs = await tonapiGet(`/blockchain/accounts/${encodeURIComponent(TREASURY)}/transactions?limit=140`);
     const list = (txs.transactions || []);
 
-    // для дебага подготовим видимый список последних входящих
-    const debugTx = [];
-    for (const tx of list.slice(0, 15)) {
-      const inMsg = tx.in_msg || null;
-      debugTx.push({
-        utime: tx.utime || tx.now || null,
-        value: inMsg ? String(inMsg.value || "0") : null,
-        source: inMsg ? (inMsg.source || null) : null,
-        msg: inMsg ? extractComment(inMsg).slice(0, 120) : null,
-      });
-    }
-
     let found = null;
-    let failReasons = { no_in_msg: 0, amount_mismatch: 0, time_old: 0, msg_empty: 0, msg_mismatch: 0 };
-
     for (const tx of list) {
       const inMsg = tx.in_msg;
-      if (!inMsg) { failReasons.no_in_msg++; continue; }
+      if (!inMsg) continue;
 
-      // amount
       const value = String(inMsg.value || "0");
-      if (value !== wantAmountNano) { failReasons.amount_mismatch++; continue; }
+      if (value !== wantAmountNano) continue;
 
-      // time
       const utime = Number(tx.utime || tx.now || 0);
-      if (createdAtSec && utime && utime < (createdAtSec - 60)) { failReasons.time_old++; continue; }
-
-      // message (у TonAPI может быть пусто, тогда твоя текущая логика НЕ найдёт)
-      const msg = extractComment(inMsg);
-      if (!msg) { failReasons.msg_empty++; continue; }
-      if (!(msg === wantComment || msg.includes(wantComment))) { failReasons.msg_mismatch++; continue; }
+      if (createdAtSec && utime && utime < (createdAtSec - 60)) continue;
 
       found = tx;
       break;
     }
 
-    if (!found) {
-      // ✅ если debug=true — вернём причины и последние входящие транзы
-      if (debug) {
-        return res.status(200).json({
-          status: "pending",
-          want: {
-            amountNano: wantAmountNano,
-            comment: wantComment,
-            createdAt,
-            createdAtSec
-          },
-          failReasons,
-          lastIncoming: debugTx
-        });
-      }
-      return res.status(200).json({ status: "pending" });
-    }
+    if (!found) return res.status(200).json({ status: "pending" });
 
-    // CREDIT
+    // ✅ CREDIT
     const balKey = `bal:${userWallet}`;
     const cur = Number((await redis.get(balKey)) || "0");
     const next = cur + Number(intent.amountNano);
@@ -142,10 +93,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       status: "credited",
-      creditedTon: Number(intent.amountNano) / 1e9,
-      balanceTon: next / 1e9,
-      // чтобы ты видел в ответе куда начислилось
-      creditedTo: userWallet
+      creditedTon: Number(intent.amountNano) / 1e9
     });
   } catch (e) {
     return res.status(500).json({ error: "confirm_error", message: String(e) });
