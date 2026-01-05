@@ -51,6 +51,9 @@ export default async function handler(req, res) {
       toAddress: TO_ADDRESS,
       amountTon,
       amountNano,
+      // ВАЖНО: comment вернём отдельно, фронт закодирует его в правильный BOC payload (Cell)
+      comment,
+      // Оставляю для совместимости, но это НЕ правильный TON payload (это просто base64 строки)
       payloadBase64: commentToBase64(comment),
     });
   } catch (e) {
