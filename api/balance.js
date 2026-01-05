@@ -13,6 +13,11 @@ export default async function handler(req, res) {
     const address = String(req.query.address || "").trim();
     if (!address) return res.status(400).json({ error: "no_address" });
 
+    // ✅ не разрешаем bal:0:...
+    if (address.startsWith("0:")) {
+      return res.status(400).json({ error: "bad_wallet_format", message: "Use friendly UQ/EQ address" });
+    }
+
     const raw = await redis.get(`bal:${address}`);
     const nano = Number(raw || "0");
 
@@ -20,7 +25,8 @@ export default async function handler(req, res) {
       ok: true,
       address,
       nano,
-      ton: nano / 1e9
+      ton: nano / 1e9,
+      balanceTon: nano / 1e9
     });
   } catch (e) {
     return res.status(500).json({ error: "balance_error", message: String(e) });
