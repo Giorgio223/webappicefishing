@@ -8,7 +8,7 @@
   <!-- Telegram WebApp -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- ✅ TonConnect UI (СТАБИЛЬНО, без dynamic import) -->
+  <!-- TonConnect UI -->
   <script src="https://unpkg.com/@tonconnect/ui@2.3.0/dist/tonconnect-ui.min.js"></script>
 
   <style>
@@ -550,7 +550,27 @@
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-  // ✅ TonConnect init (window.TON_CONNECT_UI)
+  // ✅ FIX: convert raw "0:..." to friendly "UQ/EQ..."
+  let __tonCoreAddr = null;
+  async function toFriendlyAddress(addr){
+    const a = String(addr || "").trim();
+    if (!a) return null;
+    if (!a.startsWith("0:")) return a; // already friendly
+
+    try{
+      if (!__tonCoreAddr){
+        __tonCoreAddr = await import("https://esm.sh/@ton/core@0.58.0");
+      }
+      const { Address } = __tonCoreAddr;
+      const parsed = Address.parse(a);
+      return parsed.toString({ urlSafe:true, bounceable:false, testOnly:false });
+    }catch(e){
+      console.log("toFriendlyAddress error", e);
+      return null;
+    }
+  }
+
+  // ✅ TonConnect init (FIXED)
   (function initTonConnect(){
     try{
       if (!window.TON_CONNECT_UI || !window.TON_CONNECT_UI.TonConnectUI) {
@@ -561,18 +581,23 @@
       }
 
       const TonConnectUI = window.TON_CONNECT_UI.TonConnectUI;
-      const tonUI = new TonConnectUI({ manifestUrl: location.origin + "/tonconnect-manifest.json" });
+
+      // ✅ ВАЖНО: относительный путь, чтобы работало и на домене и локально
+      const tonUI = new TonConnectUI({
+        manifestUrl: "./tonconnect-manifest.json"
+      });
 
       window.__tonUI = tonUI;
       window.__wallet = null;
 
-      tonUI.onStatusChange((wallet) => {
+      tonUI.onStatusChange(async (wallet) => {
         window.__wallet = wallet || null;
 
-        const a = wallet?.account?.address || "";
-        if (a && !a.startsWith("0:")) {
-          localStorage.setItem("walletAddress", a);
-        }
+        const raw = wallet?.account?.address || "";
+        const friendly = await toFriendlyAddress(raw);
+
+        if (friendly) localStorage.setItem("walletAddress", friendly);
+        else localStorage.removeItem("walletAddress");
 
         window.dispatchEvent(new Event("wallet_changed"));
       });
@@ -625,16 +650,14 @@
 
   function shortAddr(a){ return a ? (a.slice(0,6) + "..." + a.slice(-6)) : ""; }
 
-  // ✅ только friendly UQ/EQ
+  // ✅ FIXED: берём friendly адрес из localStorage (там уже UQ/EQ)
   function getWalletAddress(){
-    const a = window.__wallet?.account?.address || "";
-    if (a && !a.startsWith("0:")) return a;
+    const ls = (localStorage.getItem("walletAddress") || "").trim();
+    if (ls) return ls;
 
-    const ls = localStorage.getItem("walletAddress") || "";
-    if (ls && !ls.startsWith("0:")) return ls;
-
-    if (ls.startsWith("0:")) localStorage.removeItem("walletAddress");
-    return null;
+    // fallback (на всякий)
+    const raw = (window.__wallet?.account?.address || "").trim();
+    return raw || null;
   }
 
   function setBalanceTonUI(v){
@@ -651,7 +674,6 @@
       setBalanceTonUI(0);
       return;
     }
-    localStorage.setItem("walletAddress", addr);
     tonBtnText.textContent = shortAddr(addr);
     walletStatus.textContent = shortAddr(addr);
   }
@@ -905,7 +927,7 @@
     btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
 
-  // ---- Wheel + history (с задержкой 2 сек после спина) ----
+  // ---- Wheel + history (как у тебя, без изменений дальше) ----
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -1251,7 +1273,7 @@
     clearAllBetsUI();
     await refreshBalance();
 
-    // ✅ задержка истории 2 сек
+    // задержка истории 2 сек
     await sleep(2000);
 
     const serverDone = (lastServerHistoryRoundId !== null && roundId <= lastServerHistoryRoundId);
