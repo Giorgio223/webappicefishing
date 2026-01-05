@@ -27,11 +27,9 @@ export default async function handler(req, res) {
     const key = `bal:${address}`;
     const cur = Number((await redis.get(key)) || "0");
     const next = cur + deltaNano;
-
     if (next < 0) return res.status(400).json({ error: "insufficient_balance" });
 
     await redis.set(key, String(next));
-
     res.status(200).json({ address, balanceNano: String(next), balanceTon: next / 1e9 });
   } catch (e) {
     res.status(500).json({ error: "balance_adjust_error", message: String(e) });
