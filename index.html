@@ -4,17 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>IceFishing Wheel</title>
+
+  <!-- Telegram WebApp -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- ✅ TonConnect UI (СТАБИЛЬНО, без dynamic import) -->
+  <script src="https://unpkg.com/@tonconnect/ui@2.3.0/dist/tonconnect-ui.min.js"></script>
 
   <style>
     :root{
       --leaf1:#e6e8ec;
       --leaf2:#3d647f;
-
       --red:#e11d48;
       --orange:#fb923c;
       --blue:#0b2a8f;
-
       --ring1:#0b1220;
     }
     *{box-sizing:border-box}
@@ -514,40 +517,6 @@
     </div>
   </div>
 
-  <!-- TonConnect UI -->
-  <script type="module">
-    try{
-      const mod = await import("https://esm.sh/@tonconnect/ui@2.0.10");
-      const { TonConnectUI } = mod;
-
-      const tonUI = new TonConnectUI({
-        manifestUrl: `${location.origin}/tonconnect-manifest.json`
-      });
-
-      window.__tonUI = tonUI;
-      window.__wallet = null;
-
-      tonUI.onStatusChange(wallet => {
-        window.__wallet = wallet || null;
-
-        // ✅ сохраняем ТОЛЬКО friendly (не 0:)
-        const a = wallet?.account?.address || "";
-        if (a && !a.startsWith("0:")) {
-          localStorage.setItem("walletAddress", a);
-        } else {
-          // если вдруг в localStorage лежит raw — чистим, чтобы не портились ключи bal:
-          const ls = localStorage.getItem("walletAddress") || "";
-          if (ls.startsWith("0:")) localStorage.removeItem("walletAddress");
-        }
-
-        window.dispatchEvent(new Event("wallet_changed"));
-      });
-    }catch{
-      window.__tonUI = null;
-      window.__wallet = null;
-    }
-  </script>
-
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
@@ -571,7 +540,6 @@
     }
   })();
 
-  // ✅ popup fallback
   function showPopup(title, message){
     if (tg?.showPopup){
       tg.showPopup({ title, message, buttons:[{type:"ok"}] });
@@ -582,9 +550,45 @@
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-  // -------------------------
-  // ✅ TON Payload BOC (fixed Invalid magic)
-  // -------------------------
+  // ✅ TonConnect init (window.TON_CONNECT_UI)
+  (function initTonConnect(){
+    try{
+      if (!window.TON_CONNECT_UI || !window.TON_CONNECT_UI.TonConnectUI) {
+        window.__tonUI = null;
+        window.__wallet = null;
+        console.log("TonConnect UI not loaded");
+        return;
+      }
+
+      const TonConnectUI = window.TON_CONNECT_UI.TonConnectUI;
+      const tonUI = new TonConnectUI({ manifestUrl: location.origin + "/tonconnect-manifest.json" });
+
+      window.__tonUI = tonUI;
+      window.__wallet = null;
+
+      tonUI.onStatusChange((wallet) => {
+        window.__wallet = wallet || null;
+
+        const a = wallet?.account?.address || "";
+        if (a && !a.startsWith("0:")) {
+          localStorage.setItem("walletAddress", a);
+        }
+
+        window.dispatchEvent(new Event("wallet_changed"));
+      });
+
+      tonUI.connectionRestored
+        .then(() => window.dispatchEvent(new Event("wallet_changed")))
+        .catch(() => {});
+
+    }catch(e){
+      console.log("TonConnect init error", e);
+      window.__tonUI = null;
+      window.__wallet = null;
+    }
+  })();
+
+  // ✅ BOC payload comment (фикс "Invalid magic")
   function bytesToBase64(bytes){
     let bin = "";
     for (const b of bytes) bin += String.fromCharCode(b);
@@ -601,19 +605,18 @@
     return bytesToBase64(boc);
   }
 
-  // TON modal
+  // UI refs
   const tonModal = document.getElementById("tonModal");
+  const depositModal = document.getElementById("depositModal");
+
   document.getElementById("tonConnectBtn").addEventListener("click", () => tonModal.classList.add("open"));
   document.getElementById("tonClose").addEventListener("click", () => tonModal.classList.remove("open"));
   tonModal.addEventListener("click", (e) => { if (e.target === tonModal) tonModal.classList.remove("open"); });
 
-  // Deposit modal
-  const depositModal = document.getElementById("depositModal");
   document.getElementById("depositClose").addEventListener("click", () => depositModal.classList.remove("open"));
   document.getElementById("depositBack").addEventListener("click", () => depositModal.classList.remove("open"));
   depositModal.addEventListener("click", (e) => { if (e.target === depositModal) depositModal.classList.remove("open"); });
 
-  // Wallet UI
   const balanceValue = document.getElementById("balanceValue");
   const tonBtnText = document.getElementById("tonBtnText");
   const walletStatus = document.getElementById("walletStatus");
@@ -622,7 +625,7 @@
 
   function shortAddr(a){ return a ? (a.slice(0,6) + "..." + a.slice(-6)) : ""; }
 
-  // ✅ ВАЖНО: возвращаем ТОЛЬКО friendly адрес. raw 0: игнорируем.
+  // ✅ только friendly UQ/EQ
   function getWalletAddress(){
     const a = window.__wallet?.account?.address || "";
     if (a && !a.startsWith("0:")) return a;
@@ -630,7 +633,6 @@
     const ls = localStorage.getItem("walletAddress") || "";
     if (ls && !ls.startsWith("0:")) return ls;
 
-    // чистим мусор
     if (ls.startsWith("0:")) localStorage.removeItem("walletAddress");
     return null;
   }
@@ -654,7 +656,6 @@
     walletStatus.textContent = shortAddr(addr);
   }
 
-  // ✅ refreshBalance понимает разные ответы сервера
   async function refreshBalance(){
     const addr = getWalletAddress();
     if (!addr){ setBalanceTonUI(0); return 0; }
@@ -691,7 +692,6 @@
     const j = await r.json().catch(()=>({}));
     if (!r.ok) throw new Error(j.error || "balance_adjust_failed");
 
-    // сервер может вернуть balanceTon / ton / nano
     if (typeof j.balanceTon === "number") setBalanceTonUI(j.balanceTon);
     else if (typeof j.ton === "number") setBalanceTonUI(j.ton);
     else if (typeof j.nano === "number") setBalanceTonUI(j.nano / 1e9);
@@ -701,28 +701,15 @@
   window.addEventListener("wallet_changed", async () => {
     syncWalletUI();
     await refreshBalance();
-
-    // ✅ сохранить привязку tg user -> wallet
-    try{
-      const addr = getWalletAddress();
-      const initData = window.Telegram?.WebApp?.initData || "";
-      if (addr && initData){
-        await fetch("/api/bind_wallet", {
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({ initData, walletAddress: addr })
-        });
-      }
-    }catch{}
   });
 
   // Bind
   document.getElementById("actionBind").addEventListener("click", async () => {
     if (window.__tonUI?.openModal){
-      window.__tonUI.openModal();
+      await window.__tonUI.openModal();
       return;
     }
-    showPopup("TON", "TonConnect не загрузился. Проверь tonconnect-manifest.json");
+    showPopup("TON", "TonConnect не загрузился. Проверь доступность tonconnect-manifest.json");
   });
 
   // Disconnect
@@ -731,17 +718,17 @@
     localStorage.removeItem("walletAddress");
     window.__wallet = null;
     syncWalletUI();
-    showPopup("TON", "Кошелёк отвязан. Можно подключить другой.");
+    showPopup("TON", "Кошелёк отвязан.");
   });
 
-  // Deposit (open input)
+  // Deposit open
   document.getElementById("actionDeposit").addEventListener("click", () => {
     const addr = getWalletAddress();
     if (!addr){ showPopup("TON", "Сначала привяжи кошелёк."); return; }
     depositModal.classList.add("open");
   });
 
-  // Deposit confirm -> send tx -> wait 45s -> confirm -> credit
+  // Deposit confirm
   document.getElementById("depositConfirm").addEventListener("click", async () => {
     const addr = getWalletAddress();
     if (!addr){ showPopup("TON", "Сначала привяжи кошелёк."); return; }
@@ -764,12 +751,11 @@
     const intent = await r.json();
 
     try{
-      // ✅ покажем точную сумму (если сервер добавил хвост nanoTON)
       const exact = (typeof intent.amountTonExact === "number")
         ? intent.amountTonExact
         : (Number(intent.amountNano) / 1e9);
 
-      showPopup("TON", `Отправляю транзакцию на ${exact} TON.\nПроверка через 45 секунд…`);
+      showPopup("TON", `Отправляю ${exact} TON.\nПроверка через 45 секунд…`);
 
       await window.__tonUI.sendTransaction({
         validUntil: Math.floor(Date.now()/1000) + 300,
@@ -791,7 +777,6 @@
     }
   });
 
-  // ✅ waitAndCredit всегда использует friendly адрес пользователя (без 0:)
   async function waitAndCredit(intentId){
     const addr = getWalletAddress();
     if (!addr){
@@ -819,22 +804,22 @@
       await sleep(2000);
     }
 
-    showPopup("TON", "Не удалось подтвердить депозит. Попробуй ещё раз позже.");
+    showPopup("TON", "Не удалось подтвердить депозит. Попробуй позже.");
   }
 
   document.getElementById("actionWithdraw").addEventListener("click", () => {
-    showPopup("TON", "Вывод добавим следующим шагом.");
+    showPopup("TON", "Вывод добавим позже.");
   });
 
-  // --- BETS + UNDO + BALANCE RULES ---
+  // ---- Bets / undo / balance rules ----
   let currentBet = 0.2;
   const betSelect = document.getElementById("betSelect");
   const betMenu = document.getElementById("betMenu");
   const betValue = document.getElementById("betValue");
   const undoBtn = document.getElementById("undoBtn");
 
-  const totals = new Map(); // target -> totalBetTon
-  const actions = [];       // stack {target, amountTon}
+  const totals = new Map();
+  const actions = [];
 
   function fmt(x){
     const s = (Math.round(x*10)/10).toFixed(1);
@@ -881,7 +866,7 @@
     try{
       await adjustBalance(-amountTon);
     }catch{
-      showPopup("Баланс", "Не удалось списать баланс (сервер).");
+      showPopup("Баланс", "Не удалось списать баланс.");
       return;
     }
 
@@ -907,7 +892,7 @@
     }catch{
       actions.push(last);
       totals.set(last.target, prev);
-      showPopup("Баланс", "Не удалось вернуть баланс (сервер).");
+      showPopup("Баланс", "Не удалось вернуть баланс.");
       return;
     }
 
@@ -920,7 +905,7 @@
     btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
 
-  // --- WHEEL + HISTORY ---
+  // ---- Wheel + history (с задержкой 2 сек после спина) ----
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -1038,7 +1023,7 @@
   }
 
   function drawVerticalChars(text, x, y, fill){
-    const t = (text || "").replace(/'/g,"").replace(/\s+/g," ").trim();
+    const t = (text || "").replace(/\s+/g," ").trim();
     ctx.save();
     ctx.translate(x,y);
     ctx.fillStyle = fill;
@@ -1129,66 +1114,11 @@
     }
 
     ctx.restore();
-
-    if (spinning){
-      ctx.save();
-      ctx.translate(cx,cy);
-
-      ctx.beginPath();
-      ctx.arc(0,0, innerR*1.55, 0, Math.PI*2);
-      ctx.fillStyle = "rgba(255,255,255,0.92)";
-      ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.08)";
-      ctx.lineWidth = 10;
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(0,0, innerR*1.05, 0, Math.PI*2);
-      ctx.fillStyle = "rgba(240,250,255,0.96)";
-      ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.10)";
-      ctx.lineWidth = 6;
-      ctx.stroke();
-
-      ctx.fillStyle = "rgba(11,18,32,0.90)";
-      ctx.font = `950 ${Math.floor(innerR*0.38)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("ICE", 0, -innerR*0.18);
-      ctx.fillText("FISHING", 0, innerR*0.20);
-
-      ctx.restore();
-    }
   }
 
-  const TWO_PI = Math.PI * 2;
-  const SPIN_TURNS = 10;
-  const SPIN_MS = 2600;
-
-  function getDesiredModForWinner(winnerIdx){
-    const pointerWorld = -Math.PI/2;
-    const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
-    return normalize(pointerWorld - winnerCenter);
-  }
-  function buildStrongTarget(winnerIdx){
-    const desiredMod = getDesiredModForWinner(winnerIdx);
-    const base = angle - SPIN_TURNS * TWO_PI;
-    const k = Math.floor((base - desiredMod) / TWO_PI);
-    return desiredMod + k * TWO_PI;
-  }
-
-  const hudMain = document.getElementById("hudMain");
-  const hudSub  = document.getElementById("hudSub");
-  function setHUDSpinning(){
-    hudMain.textContent = "ICE FISHING";
-    hudSub.textContent = "spinning";
-  }
-
-  // history UI
   const historyBar = document.getElementById("historyBar");
   const history = [];
   const HISTORY_MAX = 18;
-
   function renderHistory(){
     historyBar.innerHTML = "";
     for (const idx of history){
@@ -1200,11 +1130,9 @@
     }
   }
 
-  // LIVE SYNC + delay 2s
   let timeOffset = 0;
   let scheduledForRoundId = null;
   let scheduledSpinTimer = null;
-
   let lastServerHistoryRoundId = null;
   let lastCommittedRoundId = null;
 
@@ -1216,6 +1144,8 @@
     return await r.json();
   }
 
+  const hudMain = document.getElementById("hudMain");
+  const hudSub  = document.getElementById("hudSub");
   function setHUDCountdown(endAt){
     if (spinning) return;
     const leftMs = endAt - serverTimeNow();
@@ -1253,7 +1183,6 @@
     const sec = sectors[winnerIndex];
     if (!sec) return;
 
-    // leaf x2
     if (sec.kind === "leaf1" || sec.kind === "leaf2"){
       const stake = totals.get(sec.kind) || 0;
       if (stake > 0){
@@ -1264,7 +1193,6 @@
       return;
     }
 
-    // fish x1
     if (sec.kind === "lilblues" || sec.kind === "bigoranges" || sec.kind === "hugered"){
       const stake = totals.get(sec.kind) || 0;
       if (stake > 0){
@@ -1276,10 +1204,28 @@
     }
   }
 
+  const TWO_PI = Math.PI * 2;
+  const SPIN_TURNS = 10;
+  const SPIN_MS = 2600;
+
+  function getDesiredModForWinner(winnerIdx){
+    const pointerWorld = -Math.PI/2;
+    const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
+    return normalize(pointerWorld - winnerCenter);
+  }
+  function buildStrongTarget(winnerIdx){
+    const desiredMod = getDesiredModForWinner(winnerIdx);
+    const base = angle - SPIN_TURNS * TWO_PI;
+    const k = Math.floor((base - desiredMod) / TWO_PI);
+    return desiredMod + k * TWO_PI;
+  }
+
   async function spinToWinner(winnerIndex, roundId){
     if (spinning) return;
     spinning = true;
-    setHUDSpinning();
+
+    hudMain.textContent = "ICE FISHING";
+    hudSub.textContent = "spinning";
 
     const target = buildStrongTarget(winnerIndex);
     const start = angle;
@@ -1301,10 +1247,11 @@
     spinning = false;
     drawWheel(null);
 
-    try{ await payout(winnerIndex); } catch {}
+    try{ await payout(winnerIndex); }catch{}
     clearAllBetsUI();
     await refreshBalance();
 
+    // ✅ задержка истории 2 сек
     await sleep(2000);
 
     const serverDone = (lastServerHistoryRoundId !== null && roundId <= lastServerHistoryRoundId);
@@ -1339,11 +1286,11 @@
   }
 
   // init
-  updateUndoState();
   syncWalletUI();
   refreshBalance();
   drawWheel(null);
   renderHistory();
+  updateUndoState();
   syncLoop();
   setInterval(syncLoop, 500);
   setInterval(refreshBalance, 5000);
