@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>IceFishing Admin</title>
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:#0b1220;color:#e5e7eb}
+    .wrap{max-width:720px;margin:0 auto;padding:28px}
+    .card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:18px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
+    h1{margin:0 0 10px;font-size:20px}
+    p{margin:8px 0;opacity:.9;line-height:1.4}
+    label{display:block;margin-top:12px;margin-bottom:6px;font-weight:800}
+    input{width:100%;height:44px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.25);color:#fff;padding:0 12px;font-size:15px;outline:none}
+    input::placeholder{color:rgba(255,255,255,.55)}
+    .row{display:flex;gap:12px}
+    .row > div{flex:1 1 0}
+    button{height:46px;border-radius:12px;border:0;background:#22c55e;color:#0b1220;font-weight:950;cursor:pointer;padding:0 14px}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .btn2{background:#60a5fa}
+    .btn3{background:#f59e0b}
+    .log{margin-top:12px;padding:12px;border-radius:12px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);white-space:pre-wrap}
+    .bad{color:#fb7185}
+    .ok{color:#86efac}
+    .muted{opacity:.75}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    a{color:#93c5fd}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="top">
+        <h1>IceFishing Admin</h1>
+        <span class="muted" id="status">Проверяю доступ…</span>
+      </div>
+      <p class="muted">
+        Вход только по одноразовой ссылке из бота (/admin). Если токен истёк — запроси новую ссылку.
+      </p>
+
+      <div id="panel" style="display:none">
+        <label>Кому пополнить (любой формат)</label>
+        <input id="target" placeholder="@username или tgId или wallet (EQ.../UQ...)" />
+
+        <label>Сумма (TON)</label>
+        <input id="amount" type="number" min="0.1" step="0.1" placeholder="например 1.5" />
+
+        <div class="row" style="margin-top:14px">
+          <div><button id="btnTopup">TopUp</button></div>
+          <div><button class="btn2" id="btnWho">WHO</button></div>
+          <div><button class="btn3" id="btnBal">BAL</button></div>
+        </div>
+
+        <div class="log" id="log">Готово.</div>
+      </div>
+
+      <div id="blocked" class="log" style="display:none">
+        <span class="bad">Доступ запрещён.</span>
+        <div class="muted" style="margin-top:8px">
+          Получи новую ссылку у бота командой <b>/admin</b>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const qs = new URLSearchParams(location.search);
+  const token = qs.get("token") || "";
+
+  const statusEl = document.getElementById("status");
+  const panel = document.getElementById("panel");
+  const blocked = document.getElementById("blocked");
+  const logEl = document.getElementById("log");
+
+  const targetEl = document.getElementById("target");
+  const amountEl = document.getElementById("amount");
+  const btnTopup = document.getElementById("btnTopup");
+  const btnWho = document.getElementById("btnWho");
+  const btnBal = document.getElementById("btnBal");
+
+  function log(msg, ok=true){
+    logEl.textContent = msg;
+    logEl.className = "log " + (ok ? "ok" : "bad");
+  }
+
+  async function api(path, opts={}){
+    const headers = Object.assign({}, opts.headers || {}, {
+      "X-Admin-Token": token
+    });
+    const r = await fetch(path, { ...opts, headers, cache:"no-store" });
+    const j = await r.json().catch(()=>({}));
+    return { ok: r.ok, j };
+  }
+
+  async function validate(){
+    if (!token){
+      statusEl.textContent = "Нет токена";
+      blocked.style.display = "block";
+      return;
+    }
+    const r = await api("/api/admin_validate");
+    if (!r.ok || !r.j.ok){
+      statusEl.textContent = "Нет доступа";
+      blocked.style.display = "block";
+      return;
+    }
+    statusEl.textContent = "Доступ разрешён";
+    panel.style.display = "block";
+  }
+
+  btnTopup.addEventListener("click", async () => {
+    const target = targetEl.value.trim();
+    const amountTon = Number(amountEl.value);
+    if (!target) return log("Укажи @username / tgId / wallet", false);
+    if (!amountTon || amountTon <= 0) return log("Укажи сумму > 0", false);
+
+    btnTopup.disabled = true;
+    const r = await api("/api/admin_topup", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ target, amountTon })
+    });
+    btnTopup.disabled = false;
+
+    if (!r.ok) return log("Ошибка: " + (r.j.error || "topup_failed"), false);
+
+    log(
+      `✅ OK\ntarget: ${target}\nwallet: ${r.j.wallet}\nadded: ${r.j.addedTon} TON\nnewBalance: ${r.j.balanceTon} TON`,
+      true
+    );
+  });
+
+  btnWho.addEventListener("click", async () => {
+    const target = targetEl.value.trim();
+    if (!target) return log("Укажи @username или tgId", false);
+
+    btnWho.disabled = true;
+    const r = await api("/api/admin_who?target=" + encodeURIComponent(target));
+    btnWho.disabled = false;
+
+    if (!r.ok) return log("Ошибка: " + (r.j.error || "who_failed"), false);
+    log(`ℹ️ WHO\n${JSON.stringify(r.j, null, 2)}`, true);
+  });
+
+  btnBal.addEventListener("click", async () => {
+    const target = targetEl.value.trim();
+    if (!target) return log("Укажи wallet адрес", false);
+
+    btnBal.disabled = true;
+    const r = await api("/api/admin_bal?wallet=" + encodeURIComponent(target));
+    btnBal.disabled = false;
+
+    if (!r.ok) return log("Ошибка: " + (r.j.error || "bal_failed"), false);
+    log(`ℹ️ BAL\nwallet: ${r.j.wallet}\nbalance: ${r.j.balanceTon} TON`, true);
+  });
+
+  validate();
+</script>
+</body>
+</html>
