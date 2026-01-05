@@ -259,58 +259,49 @@
       display:inline-flex;
       align-items:center;
       gap:10px;
-      padding:10px 14px;
-      border-radius:999px;
+      padding:10px 12px;
+      height:44px;
+      border-radius:14px;
       border:1px solid rgba(0,0,0,.12);
       background: rgba(255,255,255,.60);
       box-shadow: 0 12px 26px rgba(0,0,0,.16);
       backdrop-filter: blur(6px);
       cursor:pointer;
       user-select:none;
-      font-weight:950;
-      color:#0b1220;
       -webkit-tap-highlight-color: transparent;
     }
-    .betHint{ font-size:11px; font-weight:900; opacity:.75; }
-    .chev{ opacity:.75; font-weight:950; }
-
+    .betSelect small{ opacity:.7; font-weight:900; }
     .betMenu{
       position:absolute;
-      left:50%;
-      transform:translateX(-50%);
-      bottom:56px;
-      min-width:240px;
+      left:0; right:0;
+      bottom:52px;
       padding:10px;
       border-radius:16px;
       border:1px solid rgba(0,0,0,.12);
-      background: rgba(255,255,255,.82);
-      box-shadow: 0 18px 34px rgba(0,0,0,.22);
+      background: rgba(255,255,255,.80);
+      box-shadow: 0 18px 36px rgba(0,0,0,.18);
       backdrop-filter: blur(8px);
       display:none;
       z-index:10;
     }
-    .betMenu.open{ display:block; }
-    .betOptions{ display:flex; gap:8px; justify-content:center; }
+    .betMenu.open{ display:flex; gap:8px; justify-content:space-between; }
     .betChip{
-      width:46px; height:46px;
-      border-radius:999px;
-      border:2px solid rgba(0,0,0,.12);
-      display:flex; align-items:center; justify-content:center;
+      flex:1 1 0;
+      height:36px;
+      border-radius:12px;
+      border:1px solid rgba(0,0,0,.12);
+      background: rgba(255,255,255,.75);
       font-weight:950;
       cursor:pointer;
-      user-select:none;
-      box-shadow: 0 10px 18px rgba(0,0,0,.14);
+      display:flex; align-items:center; justify-content:center;
+      -webkit-tap-highlight-color: transparent;
     }
-    .c01{ background:#7c3aed; color:#fff; }
-    .c02{ background:#22c55e; color:#0b1220; }
-    .c05{ background:#f59e0b; color:#1b1b1b; }
-    .c10{ background:#ef4444; color:#fff; }
+    .betChip:active{ transform: translateY(1px); }
 
+    /* Modals */
     .modalOverlay{
-      position:fixed;
-      inset:0;
-      background: rgba(0,0,0,.45);
-      backdrop-filter: blur(4px);
+      position:fixed; inset:0;
+      background: rgba(0,0,0,.35);
       display:none;
       align-items:flex-end;
       justify-content:center;
@@ -318,71 +309,71 @@
     }
     .modalOverlay.open{ display:flex; }
     .sheet{
-      width:min(520px, 96vw);
-      border-radius:22px 22px 0 0;
+      width:min(430px, 92vw);
+      border-radius:18px 18px 0 0;
       background: rgba(255,255,255,.92);
+      box-shadow: 0 -20px 40px rgba(0,0,0,.20);
       border:1px solid rgba(0,0,0,.12);
-      box-shadow: 0 -18px 40px rgba(0,0,0,.28);
+      backdrop-filter: blur(10px);
       padding:14px;
-      padding-bottom:18px;
     }
     .sheetHeader{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      padding:6px 6px 12px 6px;
+      display:flex; align-items:center; justify-content:space-between;
+      gap:12px;
+      margin-bottom:10px;
     }
     .sheetTitle{
       font-weight:950;
+      font-size:16px;
       color:#0b1220;
-      letter-spacing:.2px;
-      display:flex;
-      align-items:center;
-      gap:10px;
     }
-    .sheetTitle img{ width:22px; height:22px; border-radius:6px; }
     .closeBtn{
-      width:40px; height:40px;
-      border-radius:999px;
+      width:36px; height:36px;
+      border-radius:12px;
       border:1px solid rgba(0,0,0,.12);
       background: rgba(255,255,255,.75);
       cursor:pointer;
       font-weight:950;
+      -webkit-tap-highlight-color: transparent;
     }
-    .sheetBtns{
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-      padding:0 6px;
-    }
+    .sheetList{ display:flex; flex-direction:column; gap:8px; }
     .sheetAction{
-      height:54px;
-      border-radius:16px;
-      border:1px solid rgba(0,0,0,.12);
-      background: rgba(245,250,255,.92);
-      box-shadow: 0 12px 26px rgba(0,0,0,.10);
       display:flex;
       align-items:center;
       justify-content:space-between;
-      padding:0 14px;
+      gap:10px;
+      padding:12px 12px;
+      border-radius:14px;
+      border:1px solid rgba(0,0,0,.10);
+      background: rgba(255,255,255,.80);
       cursor:pointer;
       user-select:none;
+      -webkit-tap-highlight-color: transparent;
       font-weight:950;
       color:#0b1220;
+    }
+    .sheetAction small{
+      opacity:.65;
+      font-weight:900;
+      font-size:12px;
     }
 
     .depositInput{
       width:100%;
-      height:52px;
+      height:46px;
       border-radius:14px;
       border:1px solid rgba(0,0,0,.12);
-      padding:0 14px;
-      font-size:18px;
+      padding:0 12px;
+      font-size:15px;
       font-weight:900;
       outline:none;
+      background: rgba(255,255,255,.85);
+      margin:10px 0 12px;
     }
-    .row2{ display:flex; gap:10px; margin-top:12px; }
+    .row2{
+      display:flex;
+      gap:10px;
+    }
     .row2 .sheetAction{ flex:1 1 0; justify-content:center; }
   </style>
 </head>
@@ -390,93 +381,88 @@
 <body>
   <div class="snow" id="snow"></div>
 
-  <div class="topRight">
-    <div class="balancePill" id="balancePill" title="Баланс">
-      <img src="ton.png" alt="TON" />
-      <span id="balanceValue">0</span><small>TON</small>
-    </div>
-
-    <a class="tonBtn" href="javascript:void(0)" id="tonConnectBtn">
-      <img src="ton.png" alt="TON" />
-      <span id="tonBtnText">TON connect</span>
-    </a>
-  </div>
-
   <div class="leftHUD">
     <div class="cube"></div>
     <div class="hudText">
-      <span id="hudMain">10</span>
-      <small id="hudSub">до спина</small>
+      <div id="hudMain">ICE FISHING</div>
+      <small id="hudSub">wheel</small>
+    </div>
+  </div>
+
+  <div class="topRight">
+    <a class="tonBtn" id="tonConnectBtn">
+      <img src="ton.png" alt="TON">
+      <span id="tonBtnText">TON connect</span>
+    </a>
+    <div class="balancePill">
+      <img src="ton.png" alt="TON">
+      <span id="balanceValue">0</span><small>TON</small>
     </div>
   </div>
 
   <div class="wheelWrap">
     <div class="pointer"></div>
-    <canvas id="wheel" width="900" height="900"></canvas>
+    <canvas id="wheel"></canvas>
   </div>
 
   <div class="bottomUI">
     <div class="historyBar" id="historyBar"></div>
 
     <div class="bonusPanel">
-      <div class="bonusTop">
-        <div class="btn small c-leaf1 bettable" data-target="leaf1">
-          <span class="btnIcon">🍃</span> Leaf 1
+      <div class="betRow">
+        <div class="betSelect" id="betSelect">
+          <span>BET</span>
+          <small><span id="betValue">0.2</span> TON</small>
+          <div class="betMenu" id="betMenu">
+            <div class="betChip" data-bet="0.2">0.2</div>
+            <div class="betChip" data-bet="0.5">0.5</div>
+            <div class="betChip" data-bet="1">1</div>
+            <div class="betChip" data-bet="2">2</div>
+          </div>
         </div>
-        <div class="btn small c-leaf2 bettable" data-target="leaf2">
-          <span class="btnIcon">🍃</span> Leaf 2
+        <button class="undoBtn" id="undoBtn" disabled>↩</button>
+      </div>
+
+      <div class="bonusTop">
+        <div class="btn big bettable c-leaf1" data-target="leaf1">
+          <div class="btnIcon">🍃</div>
+          <div>LEAF 1<br><small>+10%</small></div>
+        </div>
+        <div class="btn big bettable c-leaf2" data-target="leaf2">
+          <div class="btnIcon">🍃</div>
+          <div>LEAF 2<br><small>+20%</small></div>
         </div>
       </div>
 
       <div class="bonusBottom">
-        <div class="btn big c-blue bettable" data-target="lilblues">
-          <span class="btnIcon">🐟</span> Lil Blues Bonus
+        <div class="btn big bettable c-blue" data-target="blue">
+          <div class="btnIcon">🐟</div>
+          <div>BLUE FISH<br><small>x2</small></div>
         </div>
-        <div class="btn big c-orange bettable" data-target="bigoranges">
-          <span class="btnIcon">🐟</span> Big Oranges Bonus
+        <div class="btn big bettable c-orange" data-target="orange">
+          <div class="btnIcon">🐟</div>
+          <div>ORANGE FISH<br><small>x3</small></div>
         </div>
-        <div class="btn big c-red bettable" data-target="hugered">
-          <span class="btnIcon">🐟</span> Huge Reds Bonus
-        </div>
-      </div>
-
-      <div class="betRow">
-        <button class="undoBtn" id="undoBtn" title="Undo last bet" disabled>↩</button>
-
-        <div class="betSelect" id="betSelect">
-          <span id="betValue">0.2</span>
-          <span class="betHint">tap to change</span>
-          <span class="chev">▾</span>
-
-          <div class="betMenu" id="betMenu">
-            <div class="betOptions">
-              <div class="betChip c01" data-bet="0.1">0.1</div>
-              <div class="betChip c02" data-bet="0.2">0.2</div>
-              <div class="betChip c05" data-bet="0.5">0.5</div>
-              <div class="betChip c10" data-bet="1">1</div>
-            </div>
-          </div>
+        <div class="btn big bettable c-red" data-target="red">
+          <div class="btnIcon">🐟</div>
+          <div>RED FISH<br><small>x5</small></div>
         </div>
       </div>
-
     </div>
   </div>
 
-  <!-- TON SHEET -->
+  <!-- TON MODAL -->
   <div class="modalOverlay" id="tonModal">
     <div class="sheet">
       <div class="sheetHeader">
-        <div class="sheetTitle">
-          <img src="ton.png" alt="TON">
-          TON
-        </div>
+        <div class="sheetTitle">TON</div>
         <button class="closeBtn" id="tonClose">✕</button>
       </div>
 
-      <div class="sheetBtns">
+      <div class="sheetList">
         <div class="sheetAction" id="actionBind">
-          <span>Привязать кошелек</span>
-          <small id="walletStatus">Not connected</small>
+          <span id="walletStatus">Not connected</span>
+          <small>Bind wallet</small>
         </div>
 
         <div class="sheetAction" id="actionDisconnect">
@@ -562,6 +548,26 @@
 
   function showPopup(title, message){
     tg?.showPopup?.({ title, message, buttons:[{type:"ok"}] });
+  }
+
+  // --- TON helpers ---
+  // TonConnect ожидает payload как base64 от BOC (Cell).
+  // Если передать просто base64(строки), некоторые кошельки выдают:
+  // «Произошла ошибка: не удалось проверить транзакцию».
+  function bytesToBase64(bytes){
+    let bin = "";
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return btoa(bin);
+  }
+  let _tonCore = null;
+  async function commentToBocBase64(comment){
+    if (!_tonCore){
+      _tonCore = await import("https://esm.sh/@ton/core@0.58.0");
+    }
+    const { beginCell } = _tonCore;
+    const cell = beginCell().storeUint(0, 32).storeStringTail(String(comment || "")).endCell();
+    const boc = cell.toBoc({ idx:false }); // Uint8Array
+    return bytesToBase64(boc);
   }
 
   // TON modal
@@ -670,7 +676,7 @@
         messages:[{
           address: intent.toAddress,
           amount: intent.amountNano,
-          payload: intent.payloadBase64
+          payload: await commentToBocBase64(intent.comment || `ICEFISHING_DEPOSIT:${intent.intentId}`)
         }]
       });
 
@@ -708,7 +714,7 @@
     showPopup("TON", "Вывод добавим следующим шагом.");
   });
 
-  // --- BETS + UNDO (как было)
+  // --- BETS + UNDO
   let currentBet = 0.2;
   const betSelect = document.getElementById("betSelect");
   const betMenu = document.getElementById("betMenu");
@@ -769,98 +775,79 @@
   }
   undoBtn.addEventListener("click", (e) => { e.stopPropagation(); undoLast(); });
 
-  document.querySelectorAll(".bettable").forEach(btn => {
-    btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
+  document.querySelectorAll(".bettable").forEach(btn=>{
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      addBet(btn.dataset.target, currentBet);
+    });
   });
 
-  // --- WHEEL + HISTORY (исправлено)
-  const N = 53;
-  const step = (Math.PI*2)/N;
-  const startOffset = -Math.PI/2;
-
-  const IDX_HUGE = 0;
-  const IDX_ORANGES = [13, 39];
-  const IDX_BLUES   = [7, 20, 33, 46];
-
-  const css = getComputedStyle(document.documentElement);
-  const COLORS = {
-    red:    css.getPropertyValue('--red').trim(),
-    orange: css.getPropertyValue('--orange').trim(),
-    blue:   css.getPropertyValue('--blue').trim(),
-    leaf1:  css.getPropertyValue('--leaf1').trim(),
-    leaf2:  css.getPropertyValue('--leaf2').trim(),
-  };
-
-  const sectors = Array.from({length:N}, ()=>null);
-  sectors[IDX_HUGE] = { kind:"huge", label:"HUGE REDS", fill:COLORS.red, text:"#fff", icon:"fish" };
-  for (const i of IDX_ORANGES) sectors[i] = { kind:"orange", label:"BIG ORANGES", fill:COLORS.orange, text:"#1b1b1b", icon:"fish" };
-  for (const i of IDX_BLUES)   sectors[i] = { kind:"blue", label:"LIL BLUES", fill:COLORS.blue, text:"#fff", icon:"fish" };
-
-  let leaf1Left = 23, leaf2Left = 23;
-  let toggle = 0;
-  for (let i=0;i<N;i++){
-    if (sectors[i]) continue;
-    const wantLeaf1 = (toggle % 2 === 0);
-    if (wantLeaf1 && leaf1Left > 0){
-      sectors[i] = { kind:"leaf1", label:"", fill:COLORS.leaf1, text:"#111827", icon:"leaf" };
-      leaf1Left--;
-    } else if (!wantLeaf1 && leaf2Left > 0){
-      sectors[i] = { kind:"leaf2", label:"", fill:COLORS.leaf2, text:"#fff", icon:"leaf" };
-      leaf2Left--;
-    } else {
-      if (leaf1Left > 0){
-        sectors[i] = { kind:"leaf1", label:"", fill:COLORS.leaf1, text:"#111827", icon:"leaf" };
-        leaf1Left--;
-      } else {
-        sectors[i] = { kind:"leaf2", label:"", fill:COLORS.leaf2, text:"#fff", icon:"leaf" };
-        leaf2Left--;
-      }
-    }
-    toggle++;
-  }
-
+  // --- WHEEL DRAW
   const canvas = document.getElementById("wheel");
   const ctx = canvas.getContext("2d");
-  const W = canvas.width, H = canvas.height;
-  const cx = W/2, cy = H/2;
+  const N = 53;
+  const sectors = [];
+  for (let i=0;i<N;i++){
+    const isFish = i % 2 === 0;
+    sectors.push({
+      icon: isFish ? "fish" : "leaf",
+      fill: isFish ? (i%6===0? "rgba(225,29,72,0.95)" : i%6===2? "rgba(251,146,60,0.95)" : "rgba(11,42,143,0.95)") : (i%4===1? "#e6e8ec" : "#3d647f")
+    });
+  }
 
-  const outerR = Math.min(W,H)*0.47;
-  const innerR = outerR*0.22;
+  function resize(){
+    const r = canvas.getBoundingClientRect();
+    canvas.width = Math.floor(r.width * devicePixelRatio);
+    canvas.height = Math.floor(r.height * devicePixelRatio);
+    ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  }
+  window.addEventListener("resize", resize);
+  resize();
 
   let angle = 0;
   let spinning = false;
 
+  const startOffset = -Math.PI/2;
+  const step = (Math.PI*2)/N;
+
   function normalize(a){
-    const t = Math.PI*2;
-    return ((a%t)+t)%t;
+    while (a < 0) a += Math.PI*2;
+    while (a >= Math.PI*2) a -= Math.PI*2;
+    return a;
   }
-  function indexAtPointer(a){
+
+  function indexAtPointer(ang){
     const pointerWorld = -Math.PI/2;
-    const rel = normalize(pointerWorld - a - startOffset);
-    return Math.floor(rel / step);
+    const rel = normalize(pointerWorld - ang - startOffset);
+    const idx = Math.floor(rel / step);
+    return Math.max(0, Math.min(N-1, idx));
   }
+
   function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
 
-  function drawFishIcon(x,y,scale,fill){
+  function drawFishIcon(x,y,scale,stroke){
     ctx.save();
     ctx.translate(x,y);
-    ctx.scale(scale, scale);
-    ctx.fillStyle = fill;
-
+    ctx.scale(scale,scale);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = stroke;
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.beginPath();
-    ctx.ellipse(0, 0, 14, 9, 0, 0, Math.PI*2);
+    ctx.ellipse(0,0,18,12,0,0,Math.PI*2);
     ctx.fill();
+    ctx.stroke();
 
     ctx.beginPath();
-    ctx.moveTo(-14, 0);
-    ctx.lineTo(-26, -10);
-    ctx.lineTo(-26, 10);
+    ctx.moveTo(18,0);
+    ctx.lineTo(30,10);
+    ctx.lineTo(30,-10);
     ctx.closePath();
     ctx.fill();
+    ctx.stroke();
 
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.fillStyle = stroke;
     ctx.beginPath();
-    ctx.arc(8, -2, 2.2, 0, Math.PI*2);
+    ctx.arc(-6,-3,2.2,0,Math.PI*2);
     ctx.fill();
     ctx.restore();
   }
@@ -868,119 +855,59 @@
   function drawLeafIcon(x,y,scale,stroke){
     ctx.save();
     ctx.translate(x,y);
-    ctx.scale(scale, scale);
-
+    ctx.scale(scale,scale);
+    ctx.lineWidth = 3;
     ctx.strokeStyle = stroke;
-    ctx.lineWidth = 2.6;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.beginPath();
-    ctx.moveTo(0, 12);
-    ctx.quadraticCurveTo(18, 2, 0, -14);
-    ctx.quadraticCurveTo(-18, 2, 0, 12);
-    ctx.closePath();
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(0, 10);
-    ctx.lineTo(0, -12);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  function drawVerticalChars(text, x, y, fill){
-    const t = text.replace(/'/g,"").replace(/\s+/g," ").trim();
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.fillStyle = fill;
-    ctx.font = "900 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    const lineH = 11;
-    const maxLen = 10;
-    const s = t.slice(0, maxLen);
-    const totalH = (s.length-1)*lineH;
-
-    for (let i=0;i<s.length;i++){
-      ctx.fillText(s[i], 0, -totalH/2 + i*lineH);
-    }
-    ctx.restore();
-  }
-
-  function drawWheel(highlightIdx=null){
-    ctx.clearRect(0,0,W,H);
-
-    // outer ice disk
-    ctx.save();
-    const ice = ctx.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
-    ice.addColorStop(0, "rgba(255,255,255,0.96)");
-    ice.addColorStop(0.55, "rgba(222,236,247,0.98)");
-    ice.addColorStop(1, "rgba(184,205,224,0.96)");
-    ctx.fillStyle = ice;
-    ctx.beginPath();
-    ctx.arc(cx,cy,outerR*1.05,0,Math.PI*2);
+    ctx.ellipse(0,0,16,24,Math.PI/6,0,Math.PI*2);
     ctx.fill();
-    ctx.restore();
-
-    // rim
-    ctx.save();
-    const rimGrad = ctx.createRadialGradient(cx,cy,outerR*0.92, cx,cy,outerR*1.06);
-    rimGrad.addColorStop(0, "rgba(18,27,47,0.95)");
-    rimGrad.addColorStop(1, "rgba(7,10,18,0.98)");
-    ctx.strokeStyle = rimGrad;
-    ctx.lineWidth = outerR*0.10;
+    ctx.stroke();
     ctx.beginPath();
-    ctx.arc(cx,cy,outerR*1.02,0,Math.PI*2);
+    ctx.moveTo(0,-22);
+    ctx.lineTo(0,22);
     ctx.stroke();
     ctx.restore();
+  }
+
+  function drawWheel(activeIndex){
+    const w = canvas.width / devicePixelRatio;
+    const h = canvas.height / devicePixelRatio;
+    const cx = w/2, cy = h/2;
+    const R = Math.min(w,h)/2 - 6;
+    const innerR = R*0.52;
+
+    ctx.clearRect(0,0,w,h);
 
     ctx.save();
     ctx.translate(cx,cy);
     ctx.rotate(angle);
 
     for (let i=0;i<N;i++){
-      const a0 = i*step + startOffset;
+      const a0 = startOffset + i*step;
       const a1 = a0 + step;
-      const sec = sectors[i];
-      const isHi = (highlightIdx===i);
 
       ctx.beginPath();
       ctx.moveTo(0,0);
-      ctx.arc(0,0, outerR*0.90, a0, a1);
+      ctx.arc(0,0,R,a0,a1,false);
       ctx.closePath();
-
-      ctx.fillStyle = sec.fill;
+      ctx.fillStyle = sectors[i].fill;
       ctx.fill();
 
-      if (isHi){
-        ctx.fillStyle = "rgba(255,255,255,0.10)";
-        ctx.fill();
-      }
-
-      ctx.strokeStyle = "rgba(255,255,255,0.20)";
-      ctx.lineWidth = 1.1;
+      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.lineWidth = 1;
       ctx.stroke();
 
       const mid = (a0+a1)/2;
-      const iconR = outerR*0.82;
+      const x = Math.cos(mid) * (R*0.72);
+      const y = Math.sin(mid) * (R*0.72);
 
-      ctx.save();
-      ctx.rotate(mid);
-      ctx.translate(iconR, 0);
-
-      if (sec.icon === "fish"){
-        drawFishIcon(0, 0, 1.05, "rgba(255,255,255,0.92)");
-        ctx.rotate(Math.PI/2);
-        drawVerticalChars(sec.label, 0, 92, sec.text);
-      } else {
-        const stroke = (sec.kind === "leaf1") ? "rgba(17,24,39,0.65)" : "rgba(255,255,255,0.82)";
-        drawLeafIcon(0, 0, 0.9, stroke);
+      const stroke = "rgba(0,0,0,0.35)";
+      if (sectors[i].icon === "fish"){
+        drawFishIcon(x,y,0.9,stroke);
+      }else{
+        drawLeafIcon(x,y,0.9,stroke);
       }
-
-      ctx.restore();
     }
 
     ctx.restore();
@@ -1063,10 +990,11 @@
   // Серверная история обновляется на roundId-1
   let lastServerHistoryRoundId = null;
 
-  // Чтобы история обновлялась сразу ПОСЛЕ ОСТАНОВКИ, но не “показывала заранее”
-  // мы добавляем в историю только после анимации, используя winner текущего раунда
-  let pendingRoundId = null;
-  let pendingWinner = null;
+  // ⚠️ ВАЖНО: нельзя хранить «pendingWinner» глобально, потому что во время анимации
+  // может начаться следующий раунд и pending перезапишется — из-за этого в историю
+  // «утекает» следующий результат.
+  // Поэтому winner/roundId передаём прямо в spinToWinner() и именно их добавляем в историю.
+  let lastCommittedRoundId = null;
 
   function serverTimeNow(){ return Date.now() + timeOffset; }
 
@@ -1095,17 +1023,13 @@
   function scheduleSpinAtEnd(endAt, winnerIndex, roundId){
     if (scheduledSpinTimer) clearTimeout(scheduledSpinTimer);
 
-    // Запомним, что после анимации надо добавить в историю
-    pendingRoundId = roundId;
-    pendingWinner = winnerIndex;
-
     const delay = Math.max(0, endAt - serverTimeNow());
-    scheduledSpinTimer = setTimeout(() => { spinToWinner(winnerIndex); }, delay);
+    scheduledSpinTimer = setTimeout(() => { spinToWinner(winnerIndex, roundId); }, delay);
 
     scheduledForRoundId = roundId;
   }
 
-  async function spinToWinner(winnerIndex){
+  async function spinToWinner(winnerIndex, roundId){
     if (spinning) return;
     spinning = true;
     setHUDSpinning();
@@ -1130,14 +1054,15 @@
     spinning = false;
     drawWheel(null);
 
-    // ✅ Добавляем в историю ТОЛЬКО ПОСЛЕ остановки
-    if (pendingRoundId !== null && pendingWinner !== null) {
-      history.push(pendingWinner);
+    // ✅ Добавляем в историю ТОЛЬКО ПОСЛЕ остановки И ТОЛЬКО ЭТОТ roundId
+    // Не добавляем, если сервер уже прислал этот раунд (или если мы уже добавляли).
+    const alreadyOnServer = (lastServerHistoryRoundId !== null && roundId <= lastServerHistoryRoundId);
+    const alreadyLocally = (lastCommittedRoundId !== null && roundId <= lastCommittedRoundId);
+    if (!alreadyOnServer && !alreadyLocally) {
+      history.push(winnerIndex);
       if (history.length > HISTORY_MAX) history.splice(0, history.length - HISTORY_MAX);
       renderHistory();
-
-      pendingRoundId = null;
-      pendingWinner = null;
+      lastCommittedRoundId = roundId;
     }
   }
 
