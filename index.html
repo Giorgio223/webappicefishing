@@ -610,7 +610,7 @@
 
       // ✅ Жёстко указываем абсолютный манифест (Vercel + TG webview)
       const tonUI = new TonConnectUI({
-        manifestUrl: "https://www.icefishing.business/tonconnect-manifest.json"
+        manifestUrl: `${location.origin}/tonconnect-manifest.json`
       });
 
       window.__tonUI = tonUI;
