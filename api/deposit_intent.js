@@ -6,19 +6,14 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// ⚠️ куда пользователи будут отправлять TON (твой “treasury” адрес)
 const TO_ADDRESS = process.env.TREASURY_TON_ADDRESS;
-// минимальный депозит (например 0.2 TON)
-const AMOUNT_TON = Number(process.env.DEPOSIT_AMOUNT_TON || "0.2");
 
 function toNanoString(ton) {
   return String(Math.floor(ton * 1e9));
 }
 
-// делаем base64 payload с комментарием (просто и стабильно)
 function commentToBase64(comment) {
-  // plain text comment -> base64 (TonConnect wallets понимают как payload)
-  return btoa(unescape(encodeURIComponent(comment)));
+  return Buffer.from(comment, "utf8").toString("base64");
 }
 
 export default async function handler(req, res) {
@@ -28,25 +23,35 @@ export default async function handler(req, res) {
 
     if (!TO_ADDRESS) return res.status(500).json({ error: "no_treasury_address" });
 
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
+    const amountTon = Number(body.amountTon);
+
+    if (!amountTon || amountTon <= 0) return res.status(400).json({ error: "bad_amount" });
+    if (amountTon < 0.1) return res.status(400).json({ error: "min_amount_0_1" });
+
     const intentId = crypto.randomBytes(16).toString("hex");
     const comment = `ICEFISHING_DEPOSIT:${intentId}`;
+    const amountNano = toNanoString(amountTon);
 
-    // сохраняем intent (потом по нему будем подтверждать)
-    await redis.set(`dep:intent:${intentId}`, JSON.stringify({
-      intentId,
-      toAddress: TO_ADDRESS,
-      amountNano: toNanoString(AMOUNT_TON),
-      comment,
-      createdAt: Date.now(),
-      status: "created"
-    }), { ex: 60 * 30 }); // 30 минут
+    await redis.set(
+      `dep:intent:${intentId}`,
+      JSON.stringify({
+        intentId,
+        toAddress: TO_ADDRESS,
+        amountNano,
+        comment,
+        createdAt: Date.now(),
+        status: "created",
+      }),
+      { ex: 60 * 30 }
+    );
 
     res.status(200).json({
       intentId,
       toAddress: TO_ADDRESS,
-      amountTon: AMOUNT_TON,
-      amountNano: toNanoString(AMOUNT_TON),
-      payloadBase64: commentToBase64(comment)
+      amountTon,
+      amountNano,
+      payloadBase64: commentToBase64(comment),
     });
   } catch (e) {
     res.status(500).json({ error: "deposit_intent_error", message: String(e) });
