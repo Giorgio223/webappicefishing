@@ -8,12 +8,10 @@ const redis = new Redis({
 
 const TREASURY = process.env.TREASURY_TON_ADDRESS;
 
-function toNanoSafe(amountTon) {
+function toNano(amountTon) {
   const n = Number(amountTon);
   if (!Number.isFinite(n) || n <= 0) return null;
-  // безопасно: округляем до 9 знаков, потом переводим в nano
-  const fixed = Math.round(n * 1e9);
-  return fixed;
+  return Math.round(n * 1e9);
 }
 
 export default async function handler(req, res) {
@@ -28,28 +26,26 @@ export default async function handler(req, res) {
     if (!Number.isFinite(amountTon) || amountTon <= 0) return res.status(400).json({ error: "bad_amount" });
     if (amountTon < 0.1) return res.status(400).json({ error: "min_0_1" });
 
-    const baseNano = toNanoSafe(amountTon);
+    const baseNano = toNano(amountTon);
     if (baseNano === null) return res.status(400).json({ error: "bad_amount" });
 
-    // ✅ уникальный хвост (1..999 nanoTON) — не влияет на игрока, но делает депозит уникальным
+    // ✅ уникальный хвост 1..999 nanoTON
     const tail = 1 + Math.floor(Math.random() * 999);
     const amountNano = String(baseNano + tail);
-
-    // точное значение TON, чтобы показать пользователю (до 9 знаков)
-    const amountTonExact = (Number(amountNano) / 1e9);
+    const amountTonExact = Number(amountNano) / 1e9;
 
     const intentId = crypto.randomBytes(16).toString("hex");
-    const comment = `ICEFISHING_DEPOSIT:${intentId}`; // можно оставить для удобства, но подтверждение будет по amountNano
+    const comment = `ICEFISHING_DEPOSIT:${intentId}`;
 
     const intent = {
       intentId,
       toAddress: TREASURY,
-      amountNano,         // ✅ именно эту сумму отправляем
-      amountTon,          // то, что ввёл
-      amountTonExact,     // ✅ то, что реально надо отправить (с хвостом)
+      amountNano,
+      amountTon,
+      amountTonExact,
       comment,
       createdAt: Date.now(),
-      status: "created",
+      status: "created"
     };
 
     await redis.set(`dep:intent:${intentId}`, JSON.stringify(intent), { ex: 60 * 60 });
