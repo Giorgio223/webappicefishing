@@ -8,16 +8,21 @@ const redis = new Redis({
 export default async function handler(req, res) {
   try {
     res.setHeader("Cache-Control", "no-store");
+    if (req.method !== "GET") return res.status(405).json({ error: "method" });
 
-    const address = String(req.query.address || "");
+    const address = String(req.query.address || "").trim();
     if (!address) return res.status(400).json({ error: "no_address" });
 
-    const key = `bal:${address}`;
-    const balNano = String((await redis.get(key)) || "0");
-    const balTon = Number(balNano) / 1e9;
+    const raw = await redis.get(`bal:${address}`);
+    const nano = Number(raw || "0");
 
-    res.status(200).json({ address, balanceNano: balNano, balanceTon: balTon });
+    return res.status(200).json({
+      ok: true,
+      address,
+      nano,
+      ton: nano / 1e9
+    });
   } catch (e) {
-    res.status(500).json({ error: "balance_error", message: String(e) });
+    return res.status(500).json({ error: "balance_error", message: String(e) });
   }
 }
