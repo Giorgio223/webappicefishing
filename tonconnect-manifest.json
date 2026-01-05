@@ -1,5 +1,7 @@
 {
-  "url": "https://icefishing.business",
   "name": "IceFishing",
-  "iconUrl": "https://icefishing.business/ton.png"
+  "url": "https://icefishing.business",
+  "iconUrl": "https://icefishing.business/ton.png",
+  "termsOfUseUrl": "https://icefishing.business",
+  "privacyPolicyUrl": "https://icefishing.business"
 }
