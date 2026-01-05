@@ -306,7 +306,6 @@
     .c05{ background:#f59e0b; color:#1b1b1b; }
     .c10{ background:#ef4444; color:#fff; }
 
-    /* Modals */
     .modalOverlay{
       position:fixed;
       inset:0;
@@ -431,13 +430,13 @@
 
       <div class="bonusBottom">
         <div class="btn big c-blue bettable" data-target="lilblues">
-          <span class="btnIcon">🐟</span> Lil Blues Bonus
+          <span class="btnIcon">🐟</span> LIL BLUES Bonus
         </div>
         <div class="btn big c-orange bettable" data-target="bigoranges">
-          <span class="btnIcon">🐟</span> Big Oranges Bonus
+          <span class="btnIcon">🐟</span> BIG ORANGES Bonus
         </div>
         <div class="btn big c-red bettable" data-target="hugered">
-          <span class="btnIcon">🐟</span> Huge Reds Bonus
+          <span class="btnIcon">🐟</span> HUGE REDS Bonus
         </div>
       </div>
 
@@ -530,6 +529,17 @@
 
       tonUI.onStatusChange(wallet => {
         window.__wallet = wallet || null;
+
+        // ✅ сохраняем ТОЛЬКО friendly (не 0:)
+        const a = wallet?.account?.address || "";
+        if (a && !a.startsWith("0:")) {
+          localStorage.setItem("walletAddress", a);
+        } else {
+          // если вдруг в localStorage лежит raw — чистим, чтобы не портились ключи bal:
+          const ls = localStorage.getItem("walletAddress") || "";
+          if (ls.startsWith("0:")) localStorage.removeItem("walletAddress");
+        }
+
         window.dispatchEvent(new Event("wallet_changed"));
       });
     }catch{
@@ -561,7 +571,7 @@
     }
   })();
 
-  // ✅ FIX: popup fallback (если не Telegram WebApp или popup недоступен)
+  // ✅ popup fallback
   function showPopup(title, message){
     if (tg?.showPopup){
       tg.showPopup({ title, message, buttons:[{type:"ok"}] });
@@ -573,7 +583,7 @@
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
   // -------------------------
-  // ✅ TON Payload (BOC Cell) – FIX "Invalid magic"
+  // ✅ TON Payload BOC (fixed Invalid magic)
   // -------------------------
   function bytesToBase64(bytes){
     let bin = "";
@@ -586,7 +596,6 @@
       _tonCore = await import("https://esm.sh/@ton/core@0.58.0");
     }
     const { beginCell } = _tonCore;
-    // стандартный текстовый комментарий: op=0 + string
     const cell = beginCell().storeUint(0, 32).storeStringTail(String(comment || "")).endCell();
     const boc = cell.toBoc({ idx:false });
     return bytesToBase64(boc);
@@ -612,28 +621,22 @@
   let balanceTonCache = 0;
 
   function shortAddr(a){ return a ? (a.slice(0,6) + "..." + a.slice(-6)) : ""; }
+
+  // ✅ ВАЖНО: возвращаем ТОЛЬКО friendly адрес. raw 0: игнорируем.
   function getWalletAddress(){
-  // 1) всегда приоритет TonConnect (он даёт friendly UQ/EQ)
-  const w = window.__wallet;
-  const a = w?.account?.address || "";
-  if (a && !a.startsWith("0:")) return a;
+    const a = window.__wallet?.account?.address || "";
+    if (a && !a.startsWith("0:")) return a;
 
-  // 2) fallback из localStorage — но ТОЛЬКО если это friendly, raw игнорируем
-  const ls = localStorage.getItem("walletAddress") || "";
-  if (ls && !ls.startsWith("0:")) return ls;
+    const ls = localStorage.getItem("walletAddress") || "";
+    if (ls && !ls.startsWith("0:")) return ls;
 
-  // 3) если в localStorage лежит raw, чистим чтобы не ломало всё дальше
-  if (ls && ls.startsWith("0:")) {
-    localStorage.removeItem("walletAddress");
+    // чистим мусор
+    if (ls.startsWith("0:")) localStorage.removeItem("walletAddress");
+    return null;
   }
-
-  return null;
-}
-
 
   function setBalanceTonUI(v){
     balanceTonCache = Number(v) || 0;
-    // показываем красиво: 0 / 0.1 / 1.25
     const s = (Math.round(balanceTonCache * 1000) / 1000).toString();
     balanceValue.textContent = s;
   }
@@ -651,7 +654,7 @@
     walletStatus.textContent = shortAddr(addr);
   }
 
-  // ✅ FIX: refreshBalance умеет читать разные форматы ответа
+  // ✅ refreshBalance понимает разные ответы сервера
   async function refreshBalance(){
     const addr = getWalletAddress();
     if (!addr){ setBalanceTonUI(0); return 0; }
@@ -661,23 +664,15 @@
 
     const j = await r.json().catch(()=>({}));
 
-    // поддержка:
-    // - { balanceTon: number }
-    // - { ton: number }
-    // - { nano: number } (нанотоны)
     let ton = 0;
-
     if (typeof j.balanceTon === "number") ton = j.balanceTon;
     else if (typeof j.ton === "number") ton = j.ton;
     else if (typeof j.nano === "number") ton = j.nano / 1e9;
     else if (typeof j.nano === "string" && j.nano) ton = Number(j.nano) / 1e9;
-
-    // если сервер отдаёт строкой
-    if (!Number.isFinite(ton) && typeof j.balanceTon === "string") ton = Number(j.balanceTon);
-    if (!Number.isFinite(ton) && typeof j.ton === "string") ton = Number(j.ton);
+    else if (typeof j.balanceTon === "string") ton = Number(j.balanceTon);
+    else if (typeof j.ton === "string") ton = Number(j.ton);
 
     if (!Number.isFinite(ton)) ton = 0;
-
     setBalanceTonUI(ton);
     return ton;
   }
@@ -686,22 +681,28 @@
     const addr = getWalletAddress();
     if (!addr) throw new Error("no_wallet");
     const deltaNano = Math.trunc(Number(deltaTon) * 1e9);
+
     const r = await fetch("/api/balance_adjust", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ address: addr, deltaNano })
     });
+
     const j = await r.json().catch(()=>({}));
     if (!r.ok) throw new Error(j.error || "balance_adjust_failed");
-    // после списания/возврата всегда перерисуем
-    await refreshBalance();
+
+    // сервер может вернуть balanceTon / ton / nano
+    if (typeof j.balanceTon === "number") setBalanceTonUI(j.balanceTon);
+    else if (typeof j.ton === "number") setBalanceTonUI(j.ton);
+    else if (typeof j.nano === "number") setBalanceTonUI(j.nano / 1e9);
+    else await refreshBalance();
   }
 
   window.addEventListener("wallet_changed", async () => {
     syncWalletUI();
     await refreshBalance();
 
-    // ✅ сохраняем привязку tg user -> wallet в Redis
+    // ✅ сохранить привязку tg user -> wallet
     try{
       const addr = getWalletAddress();
       const initData = window.Telegram?.WebApp?.initData || "";
@@ -763,17 +764,23 @@
     const intent = await r.json();
 
     try{
+      // ✅ покажем точную сумму (если сервер добавил хвост nanoTON)
+      const exact = (typeof intent.amountTonExact === "number")
+        ? intent.amountTonExact
+        : (Number(intent.amountNano) / 1e9);
+
+      showPopup("TON", `Отправляю транзакцию на ${exact} TON.\nПроверка через 45 секунд…`);
+
       await window.__tonUI.sendTransaction({
         validUntil: Math.floor(Date.now()/1000) + 300,
         messages:[{
           address: intent.toAddress,
-          amount: intent.amountNano,
-          payload: await commentToBocBase64(intent.comment)
+          amount: String(intent.amountNano),
+          payload: await commentToBocBase64(intent.comment || "")
         }]
       });
 
       depositModal.classList.remove("open");
-      showPopup("TON", "Транзакция отправлена. Проверяю через 45 секунд…");
 
       setTimeout(() => {
         waitAndCredit(intent.intentId);
@@ -784,7 +791,7 @@
     }
   });
 
-  // ✅ FIX: waitAndCredit всегда использует кошелёк пользователя и после credited делает двойной refresh
+  // ✅ waitAndCredit всегда использует friendly адрес пользователя (без 0:)
   async function waitAndCredit(intentId){
     const addr = getWalletAddress();
     if (!addr){
@@ -792,7 +799,7 @@
       return;
     }
 
-    for (let i=0;i<30;i++){
+    for (let i=0;i<45;i++){ // ~90 секунд
       const r = await fetch("/api/confirm_deposit", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
@@ -801,9 +808,7 @@
 
       if (r.ok){
         const j = await r.json().catch(()=>({}));
-
         if (j.status === "credited"){
-          // двойной refresh — чтобы UI точно обновился
           await refreshBalance();
           setTimeout(refreshBalance, 300);
           showPopup("TON", `Баланс пополнен: +${j.creditedTon} TON`);
@@ -816,6 +821,10 @@
 
     showPopup("TON", "Не удалось подтвердить депозит. Попробуй ещё раз позже.");
   }
+
+  document.getElementById("actionWithdraw").addEventListener("click", () => {
+    showPopup("TON", "Вывод добавим следующим шагом.");
+  });
 
   // --- BETS + UNDO + BALANCE RULES ---
   let currentBet = 0.2;
@@ -864,7 +873,6 @@
     const addr = getWalletAddress();
     if (!addr){ showPopup("Ставки", "Сначала привяжи кошелёк."); return; }
 
-    // ✅ проверка минимального баланса
     if (balanceTonCache + 1e-9 < amountTon){
       showPopup("Баланс", `Недостаточно средств. Нужно минимум ${fmt(amountTon)} TON`);
       return;
@@ -908,12 +916,11 @@
   }
 
   undoBtn.addEventListener("click", (e) => { e.stopPropagation(); undoLast(); });
-
   document.querySelectorAll(".bettable").forEach(btn => {
     btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
 
-  // --- WHEEL (вернул твои рыбки/надписи) ---
+  // --- WHEEL + HISTORY ---
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -1031,7 +1038,7 @@
   }
 
   function drawVerticalChars(text, x, y, fill){
-    const t = text.replace(/'/g,"").replace(/\s+/g," ").trim();
+    const t = (text || "").replace(/'/g,"").replace(/\s+/g," ").trim();
     ctx.save();
     ctx.translate(x,y);
     ctx.fillStyle = fill;
@@ -1053,7 +1060,6 @@
   function drawWheel(highlightIdx=null){
     ctx.clearRect(0,0,W,H);
 
-    // outer ice disk
     ctx.save();
     const ice = ctx.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
     ice.addColorStop(0, "rgba(255,255,255,0.96)");
@@ -1065,7 +1071,6 @@
     ctx.fill();
     ctx.restore();
 
-    // rim
     ctx.save();
     const rimGrad = ctx.createRadialGradient(cx,cy,outerR*0.92, cx,cy,outerR*1.06);
     rimGrad.addColorStop(0, "rgba(18,27,47,0.95)");
@@ -1077,7 +1082,6 @@
     ctx.stroke();
     ctx.restore();
 
-    // sectors
     ctx.save();
     ctx.translate(cx,cy);
     ctx.rotate(angle);
@@ -1126,7 +1130,6 @@
 
     ctx.restore();
 
-    // center
     if (spinning){
       ctx.save();
       ctx.translate(cx,cy);
@@ -1197,7 +1200,7 @@
     }
   }
 
-  // LIVE SYNC + FIX "следующий результат" + delay 2s
+  // LIVE SYNC + delay 2s
   let timeOffset = 0;
   let scheduledForRoundId = null;
   let scheduledSpinTimer = null;
@@ -1261,7 +1264,7 @@
       return;
     }
 
-    // fish bonuses x1
+    // fish x1
     if (sec.kind === "lilblues" || sec.kind === "bigoranges" || sec.kind === "hugered"){
       const stake = totals.get(sec.kind) || 0;
       if (stake > 0){
@@ -1298,15 +1301,12 @@
     spinning = false;
     drawWheel(null);
 
-    // выплаты + сброс ставок
     try{ await payout(winnerIndex); } catch {}
     clearAllBetsUI();
     await refreshBalance();
 
-    // ✅ задержка истории 2 секунды после окончания прокрута
     await sleep(2000);
 
-    // ✅ добавляем именно этот roundId (не следующий)
     const serverDone = (lastServerHistoryRoundId !== null && roundId <= lastServerHistoryRoundId);
     const localDone  = (lastCommittedRoundId !== null && roundId <= lastCommittedRoundId);
     if (!serverDone && !localDone){
