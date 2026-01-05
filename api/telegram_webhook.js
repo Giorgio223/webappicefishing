@@ -28,7 +28,7 @@ async function tgSendMessage(chatId, text) {
   });
 }
 
-function parseText(update) {
+function parseUpdate(update) {
   const msg = update?.message || update?.edited_message;
   const text = msg?.text || "";
   const fromId = msg?.from?.id;
@@ -36,12 +36,52 @@ function parseText(update) {
   return { text: String(text), fromId, chatId };
 }
 
-async function creditBalance(address, deltaNano) {
-  const key = `bal:${address}`;
+async function creditWalletBalance(walletAddress, deltaNano) {
+  const key = `bal:${walletAddress}`;
   const cur = Number((await redis.get(key)) || "0");
   const next = cur + Number(deltaNano);
   await redis.set(key, String(next));
   return next;
+}
+
+function isLikelyWallet(s) {
+  // простая эвристика: TON адреси часто длинные и содержат EQ / UQ и т.п.
+  return typeof s === "string" && s.length >= 20;
+}
+
+async function resolveWalletByTarget(target) {
+  // target может быть:
+  // 1) @username
+  // 2) numeric tgId
+  // 3) wallet address напрямую
+
+  if (!target) return { ok: false, reason: "no_target" };
+
+  // wallet directly
+  if (isLikelyWallet(target) && !target.startsWith("@")) {
+    return { ok: true, wallet: target, resolvedFrom: "wallet" };
+  }
+
+  // @username
+  if (target.startsWith("@")) {
+    const uname = target.slice(1).toLowerCase();
+    const tgIdStr = await redis.get(`tg:username:${uname}`);
+    if (!tgIdStr) return { ok: false, reason: "username_not_found" };
+
+    const wallet = await redis.get(`tg:wallet:${tgIdStr}`);
+    if (!wallet) return { ok: false, reason: "user_has_no_wallet" };
+
+    return { ok: true, wallet: String(wallet), resolvedFrom: `@${uname}` };
+  }
+
+  // tgId numeric
+  if (/^\d+$/.test(target)) {
+    const wallet = await redis.get(`tg:wallet:${target}`);
+    if (!wallet) return { ok: false, reason: "user_has_no_wallet" };
+    return { ok: true, wallet: String(wallet), resolvedFrom: `tgId:${target}` };
+  }
+
+  return { ok: false, reason: "bad_target_format" };
 }
 
 export default async function handler(req, res) {
@@ -49,7 +89,7 @@ export default async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     if (req.method !== "POST") return res.status(405).json({ ok: false, error: "method" });
 
-    // защита webhook секретом
+    // защита webhook secret token
     if (SECRET) {
       const headerSecret =
         req.headers["x-telegram-bot-api-secret-token"] ||
@@ -63,14 +103,13 @@ export default async function handler(req, res) {
     if (!ADMIN_ID) return res.status(500).json({ ok: false, error: "no_admin_id" });
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
-    const { text, fromId, chatId } = parseText(body);
+    const { text, fromId, chatId } = parseUpdate(body);
 
-    // Telegram ждёт 200 OK быстро
+    // Telegram ждёт быстрый 200
     res.status(200).json({ ok: true });
 
     if (!chatId) return;
 
-    // доступ только тебе
     if (Number(fromId) !== ADMIN_ID) {
       await tgSendMessage(chatId, "❌ Нет доступа.");
       return;
@@ -78,39 +117,57 @@ export default async function handler(req, res) {
 
     const t = text.trim();
 
-    // HELP
     if (t === "/start" || t === "/help") {
       await tgSendMessage(
         chatId,
         "Админ команды:\n" +
-          "/topup <wallet> <amountTon>\n" +
-          "/bal <wallet>\n\n" +
-          "Пример:\n/topup EQD... 1.5"
+          "/topup @username amountTon\n" +
+          "/topup tgId amountTon\n" +
+          "/topup walletAddress amountTon\n" +
+          "/who @username\n" +
+          "/bal walletAddress\n\n" +
+          "Пример:\n/topup @vasya 1.5"
       );
       return;
     }
 
-    // BALANCE CHECK
-    if (t.startsWith("/bal")) {
+    if (t.startsWith("/who")) {
       const parts = t.split(/\s+/);
-      const address = parts[1];
-      if (!address) {
-        await tgSendMessage(chatId, "Используй: /bal <wallet>");
+      const target = parts[1];
+      if (!target || !target.startsWith("@")) {
+        await tgSendMessage(chatId, "Используй: /who @username");
         return;
       }
-      const cur = Number((await redis.get(`bal:${address}`)) || "0") / 1e9;
-      await tgSendMessage(chatId, `Баланс ${address} = ${cur} TON`);
+      const uname = target.slice(1).toLowerCase();
+      const tgIdStr = await redis.get(`tg:username:${uname}`);
+      if (!tgIdStr) {
+        await tgSendMessage(chatId, `❌ @${uname} не найден (он должен 1 раз открыть WebApp после привязки).`);
+        return;
+      }
+      const wallet = await redis.get(`tg:wallet:${tgIdStr}`);
+      await tgSendMessage(chatId, `@${uname} -> tgId=${tgIdStr}\nwallet=${wallet || "не привязан"}`);
       return;
     }
 
-    // TOPUP
-    if (t.startsWith("/topup")) {
+    if (t.startsWith("/bal")) {
       const parts = t.split(/\s+/);
-      const address = parts[1];
+      const wallet = parts[1];
+      if (!wallet) {
+        await tgSendMessage(chatId, "Используй: /bal <walletAddress>");
+        return;
+      }
+      const cur = Number((await redis.get(`bal:${wallet}`)) || "0") / 1e9;
+      await tgSendMessage(chatId, `Баланс ${wallet} = ${cur} TON`);
+      return;
+    }
+
+    if (t.toLowerCase().startsWith("/topup")) {
+      const parts = t.split(/\s+/);
+      const target = parts[1];
       const amountTon = parts[2];
 
-      if (!address || !amountTon) {
-        await tgSendMessage(chatId, "Используй: /topup <wallet> <amountTon>\nПример: /topup EQD... 0.5");
+      if (!target || !amountTon) {
+        await tgSendMessage(chatId, "Используй: /topup @username amountTon\nПример: /topup @vasya 0.5");
         return;
       }
 
@@ -120,16 +177,28 @@ export default async function handler(req, res) {
         return;
       }
 
-      const nextNano = await creditBalance(address, deltaNano);
+      const resolved = await resolveWalletByTarget(target);
+      if (!resolved.ok) {
+        const msg =
+          resolved.reason === "username_not_found"
+            ? "❌ Username не найден. Важно: пользователь должен 1 раз зайти в WebApp, привязать кошелёк — тогда username появится."
+            : resolved.reason === "user_has_no_wallet"
+            ? "❌ У пользователя нет привязанного кошелька (или он ещё не заходил в WebApp после привязки)."
+            : "❌ Неверный формат. Используй /topup @username amount";
+        await tgSendMessage(chatId, msg);
+        return;
+      }
+
+      const nextNano = await creditWalletBalance(resolved.wallet, deltaNano);
       const nextTon = nextNano / 1e9;
 
-      await tgSendMessage(chatId, `✅ Пополнено: +${Number(amountTon)} TON\nКошелёк: ${address}\nНовый баланс: ${nextTon} TON`);
+      await tgSendMessage(
+        chatId,
+        `✅ TopUp OK\nКому: ${target} (${resolved.resolvedFrom})\nКошелёк: ${resolved.wallet}\nСумма: +${Number(amountTon)} TON\nНовый баланс: ${nextTon} TON`
+      );
       return;
     }
-
-    // ignore everything else
   } catch (e) {
-    // даже при ошибке стараемся вернуть 200 ранее, но на всякий:
     try {
       if (!res.headersSent) res.status(500).json({ ok: false, error: "webhook_error", message: String(e) });
     } catch {}
