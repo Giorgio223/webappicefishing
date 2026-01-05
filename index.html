@@ -17,15 +17,12 @@
 
       --ring1:#0b1220;
     }
-
     *{box-sizing:border-box}
-
     body{
       margin:0;
       min-height:100vh;
       font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
       overflow:hidden;
-
       background:
         radial-gradient(900px 600px at 25% 15%, rgba(255,255,255,.25), rgba(255,255,255,0) 60%),
         radial-gradient(1200px 900px at 70% 35%, rgba(255,255,255,.18), rgba(255,255,255,0) 65%),
@@ -38,7 +35,6 @@
       width:6px; height:6px;
       background:rgba(255,255,255,.85);
       border-radius:50%;
-      filter: blur(.2px);
       opacity:.85;
       animation: fall linear infinite;
     }
@@ -85,7 +81,7 @@
       cursor:pointer; user-select:none;
       -webkit-tap-highlight-color: transparent;
       text-decoration:none; color:#0b1220;
-      font-weight:950; letter-spacing:.2px;
+      font-weight:950;
     }
     .tonBtn img{ width:22px; height:22px; display:block; border-radius:6px; }
     .tonBtn:active{ transform: translateY(1px); }
@@ -127,14 +123,6 @@
       border-top:30px solid var(--ring1);
       filter: drop-shadow(0 10px 10px rgba(0,0,0,.25));
       pointer-events:none;
-    }
-    .pointer:after{
-      content:""; position:absolute; left:-10px; top:-28px;
-      width:0;height:0;
-      border-left:10px solid transparent;
-      border-right:10px solid transparent;
-      border-top:18px solid rgba(255,255,255,.92);
-      opacity:.9;
     }
 
     .bottomUI{
@@ -246,7 +234,6 @@
       justify-content:center;
       align-items:center;
       gap:10px;
-      margin-top:0;
     }
     .undoBtn{
       width:44px;
@@ -265,8 +252,7 @@
       color:#0b1220;
       -webkit-tap-highlight-color: transparent;
     }
-    .undoBtn:active{ transform: translateY(1px); }
-    .undoBtn[disabled]{ opacity:.55; cursor:not-allowed; transform:none; }
+    .undoBtn[disabled]{ opacity:.55; cursor:not-allowed; }
 
     .betSelect{
       position:relative;
@@ -285,14 +271,8 @@
       color:#0b1220;
       -webkit-tap-highlight-color: transparent;
     }
-    .betHint{
-      font-size:11px;
-      font-weight:900;
-      opacity:.75;
-      letter-spacing:.2px;
-      margin-left:2px;
-    }
-    .chev{ opacity:.75; font-weight:950; margin-left:6px; }
+    .betHint{ font-size:11px; font-weight:900; opacity:.75; }
+    .chev{ opacity:.75; font-weight:950; }
 
     .betMenu{
       position:absolute;
@@ -321,7 +301,6 @@
       user-select:none;
       box-shadow: 0 10px 18px rgba(0,0,0,.14);
     }
-    .betChip:active{ transform: translateY(1px); }
     .c01{ background:#7c3aed; color:#fff; }
     .c02{ background:#22c55e; color:#0b1220; }
     .c05{ background:#f59e0b; color:#1b1b1b; }
@@ -371,7 +350,6 @@
       cursor:pointer;
       font-weight:950;
     }
-    .closeBtn:active{ transform: translateY(1px); }
     .sheetBtns{
       display:flex;
       flex-direction:column;
@@ -393,12 +371,19 @@
       font-weight:950;
       color:#0b1220;
     }
-    .sheetAction:active{ transform: translateY(1px); }
-    .sheetAction small{
-      opacity:.7;
+
+    .depositInput{
+      width:100%;
+      height:52px;
+      border-radius:14px;
+      border:1px solid rgba(0,0,0,.12);
+      padding:0 14px;
+      font-size:18px;
       font-weight:900;
-      letter-spacing:.2px;
+      outline:none;
     }
+    .row2{ display:flex; gap:10px; margin-top:12px; }
+    .row2 .sheetAction{ flex:1 1 0; justify-content:center; }
   </style>
 </head>
 
@@ -477,6 +462,7 @@
     </div>
   </div>
 
+  <!-- TON SHEET -->
   <div class="modalOverlay" id="tonModal">
     <div class="sheet">
       <div class="sheetHeader">
@@ -492,14 +478,38 @@
           <span>Привязать кошелек</span>
           <small id="walletStatus">Not connected</small>
         </div>
+
+        <div class="sheetAction" id="actionDisconnect">
+          <span>Отвязать кошелек</span>
+          <small>Disconnect</small>
+        </div>
+
         <div class="sheetAction" id="actionDeposit">
           <span>Депозит</span>
-          <small id="depositHint">Open wallet</small>
+          <small>Enter amount</small>
         </div>
+
         <div class="sheetAction" id="actionWithdraw">
           <span>Вывод</span>
           <small>Later</small>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEPOSIT INPUT MODAL -->
+  <div class="modalOverlay" id="depositModal">
+    <div class="sheet">
+      <div class="sheetHeader">
+        <div class="sheetTitle">Пополнение</div>
+        <button class="closeBtn" id="depositClose">✕</button>
+      </div>
+
+      <input id="depositAmount" class="depositInput" type="number" min="0.1" step="0.1" placeholder="Сколько TON пополнить?">
+
+      <div class="row2">
+        <div class="sheetAction" id="depositBack">Назад</div>
+        <div class="sheetAction" id="depositConfirm">Подтвердить</div>
       </div>
     </div>
   </div>
@@ -515,6 +525,7 @@
       });
 
       window.__tonUI = tonUI;
+      window.__wallet = null;
 
       tonUI.onStatusChange(wallet => {
         window.__wallet = wallet || null;
@@ -541,7 +552,6 @@
       s.style.height = size + "px";
       s.style.left = (Math.random()*100) + "vw";
       s.style.opacity = (0.35 + Math.random()*0.55).toFixed(2);
-      s.style.filter = `blur(${(Math.random()*0.9).toFixed(2)}px)`;
       const dur = 6 + Math.random()*8;
       const delay = Math.random()*-dur;
       s.style.animationDuration = dur + "s";
@@ -550,35 +560,28 @@
     }
   })();
 
+  function showPopup(title, message){
+    tg?.showPopup?.({ title, message, buttons:[{type:"ok"}] });
+  }
+
   // TON modal
   const tonModal = document.getElementById("tonModal");
   document.getElementById("tonConnectBtn").addEventListener("click", () => tonModal.classList.add("open"));
   document.getElementById("tonClose").addEventListener("click", () => tonModal.classList.remove("open"));
   tonModal.addEventListener("click", (e) => { if (e.target === tonModal) tonModal.classList.remove("open"); });
 
-  function showPopup(title, message){
-    tg?.showPopup?.({ title, message, buttons:[{type:"ok"}] });
-  }
+  // Deposit modal
+  const depositModal = document.getElementById("depositModal");
+  document.getElementById("depositClose").addEventListener("click", () => depositModal.classList.remove("open"));
+  document.getElementById("depositBack").addEventListener("click", () => depositModal.classList.remove("open"));
+  depositModal.addEventListener("click", (e) => { if (e.target === depositModal) depositModal.classList.remove("open"); });
 
-  // Balance UI
+  // Wallet UI
   const balanceValue = document.getElementById("balanceValue");
   const tonBtnText = document.getElementById("tonBtnText");
   const walletStatus = document.getElementById("walletStatus");
 
   function shortAddr(a){ return a ? (a.slice(0,6) + "..." + a.slice(-6)) : ""; }
-
-  async function refreshBalance(){
-    const addr = getWalletAddress();
-    if (!addr){
-      balanceValue.textContent = "0";
-      return;
-    }
-    const r = await fetch(`/api/balance?address=${encodeURIComponent(addr)}`, { cache:"no-store" });
-    if (!r.ok) return;
-    const j = await r.json();
-    balanceValue.textContent = String(j.balanceTon ?? 0);
-  }
-
   function getWalletAddress(){
     const w = window.__wallet;
     return w?.account?.address || localStorage.getItem("walletAddress") || null;
@@ -589,6 +592,7 @@
     if (!addr){
       tonBtnText.textContent = "TON connect";
       walletStatus.textContent = "Not connected";
+      balanceValue.textContent = "0";
       return;
     }
     localStorage.setItem("walletAddress", addr);
@@ -596,52 +600,84 @@
     walletStatus.textContent = shortAddr(addr);
   }
 
+  async function refreshBalance(){
+    const addr = getWalletAddress();
+    if (!addr){ balanceValue.textContent = "0"; return; }
+    const r = await fetch(`/api/balance?address=${encodeURIComponent(addr)}`, { cache:"no-store" });
+    if (!r.ok) return;
+    const j = await r.json();
+    balanceValue.textContent = String(j.balanceTon ?? 0);
+  }
+
   window.addEventListener("wallet_changed", async () => {
     syncWalletUI();
     await refreshBalance();
   });
 
+  // Bind
   document.getElementById("actionBind").addEventListener("click", async () => {
     if (window.__tonUI?.openModal){
       window.__tonUI.openModal();
       return;
     }
-    showPopup("TON", "TonConnect не загрузился. Проверь tonconnect-manifest.json в корне сайта.");
+    showPopup("TON", "TonConnect не загрузился. Проверь tonconnect-manifest.json");
   });
 
-  // Deposit (реальная транзакция)
-  document.getElementById("actionDeposit").addEventListener("click", async () => {
+  // Disconnect
+  document.getElementById("actionDisconnect").addEventListener("click", async () => {
+    try{
+      await window.__tonUI?.disconnect?.();
+    }catch{}
+    localStorage.removeItem("walletAddress");
+    window.__wallet = null;
+    syncWalletUI();
+    showPopup("TON", "Кошелёк отвязан. Можно подключить другой.");
+  });
+
+  // Deposit (open input)
+  document.getElementById("actionDeposit").addEventListener("click", () => {
     const addr = getWalletAddress();
-    if (!addr){
-      showPopup("TON", "Сначала привяжи кошелек.");
-      return;
-    }
+    if (!addr){ showPopup("TON", "Сначала привяжи кошелёк."); return; }
+    depositModal.classList.add("open");
+  });
+
+  // Deposit confirm -> send tx -> confirm via server -> credit balance
+  document.getElementById("depositConfirm").addEventListener("click", async () => {
+    const addr = getWalletAddress();
+    if (!addr){ showPopup("TON", "Сначала привяжи кошелёк."); return; }
+
+    const amountTon = Number(document.getElementById("depositAmount").value);
+    if (!amountTon || amountTon <= 0){ showPopup("Ошибка", "Введите сумму TON"); return; }
+    if (amountTon < 0.1){ showPopup("Ошибка", "Минимум 0.1 TON"); return; }
+
     if (!window.__tonUI?.sendTransaction){
       showPopup("TON", "TonConnect UI не готов.");
       return;
     }
 
-    // 1) запрашиваем intent у сервера (куда платить + сколько + comment)
-    const r = await fetch("/api/deposit_intent", { method:"POST" });
-    if (!r.ok){
-      showPopup("TON", "Сервер депозита не настроен.");
-      return;
-    }
+    // intent
+    const r = await fetch("/api/deposit_intent", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ amountTon })
+    });
+    if (!r.ok){ showPopup("TON", "Сервер депозита не настроен."); return; }
     const intent = await r.json();
 
-    // 2) отправляем транзакцию из привязанного кошелька
     try{
       await window.__tonUI.sendTransaction({
-        validUntil: Math.floor(Date.now() / 1000) + 300,
-        messages: [{
+        validUntil: Math.floor(Date.now()/1000) + 300,
+        messages:[{
           address: intent.toAddress,
-          amount: intent.amountNano,      // строка в nanotons
-          payload: intent.payloadBase64   // comment/base64
+          amount: intent.amountNano,
+          payload: intent.payloadBase64
         }]
       });
 
-      // 3) просим сервер проверить и зачислить (поллинг)
-      showPopup("TON", "Транзакция отправлена. Сейчас проверю сеть и зачислю баланс.");
+      depositModal.classList.remove("open");
+      showPopup("TON", "Транзакция отправлена. Проверяю сеть и зачисляю...");
+
+      // poll confirm
       await waitAndCredit(intent.intentId, addr);
     }catch(e){
       showPopup("TON", "Транзакция отменена или ошибка кошелька.");
@@ -649,11 +685,10 @@
   });
 
   async function waitAndCredit(intentId, address){
-    // 10 попыток с паузой 2 сек
-    for (let i=0;i<10;i++){
+    for (let i=0;i<12;i++){
       const r = await fetch("/api/confirm_deposit", {
         method:"POST",
-        headers: {"Content-Type":"application/json"},
+        headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ intentId, address })
       });
       if (r.ok){
@@ -666,12 +701,14 @@
       }
       await new Promise(res => setTimeout(res, 2000));
     }
-    showPopup("TON", "Я пока не вижу транзакцию в сети. Попробуй через минуту ещё раз.");
+    showPopup("TON", "Пока не вижу транзакцию в сети. Подожди минуту и открой депозит ещё раз.");
   }
 
-  document.getElementById("actionWithdraw").addEventListener("click", () => showPopup("TON", "Вывод — добавим позже."));
+  document.getElementById("actionWithdraw").addEventListener("click", () => {
+    showPopup("TON", "Вывод добавим следующим шагом.");
+  });
 
-  // --- BETS + UNDO ---
+  // --- BETS + UNDO (как было)
   let currentBet = 0.2;
   const betSelect = document.getElementById("betSelect");
   const betMenu = document.getElementById("betMenu");
@@ -680,7 +717,6 @@
 
   const totals = new Map();
   const actions = [];
-
   function fmt(x){
     const s = (Math.round(x*10)/10).toFixed(1);
     return s.endsWith(".0") ? s.slice(0,-2) : s;
@@ -704,10 +740,8 @@
     const btn = document.querySelector(`.bettable[data-target="${target}"]`);
     if (!btn) return;
     const total = totals.get(target) || 0;
-
     const old = btn.querySelector(".placedBet");
     if (old) old.remove();
-
     if (total > 0){
       const badge = document.createElement("div");
       badge.className = "placedBet";
@@ -715,7 +749,6 @@
       btn.appendChild(badge);
     }
   }
-
   function addBet(target, amount){
     const prev = totals.get(target) || 0;
     const next = Math.round((prev + amount) * 10) / 10;
@@ -724,7 +757,6 @@
     renderTotalOnButton(target);
     updateUndoState();
   }
-
   function undoLast(){
     if (actions.length === 0) return;
     const last = actions.pop();
@@ -735,13 +767,13 @@
     renderTotalOnButton(last.target);
     updateUndoState();
   }
-
   undoBtn.addEventListener("click", (e) => { e.stopPropagation(); undoLast(); });
+
   document.querySelectorAll(".bettable").forEach(btn => {
     btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
 
-  // --- WHEEL ---
+  // --- WHEEL + HISTORY (исправлено)
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -881,6 +913,7 @@
   function drawWheel(highlightIdx=null){
     ctx.clearRect(0,0,W,H);
 
+    // outer ice disk
     ctx.save();
     const ice = ctx.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
     ice.addColorStop(0, "rgba(255,255,255,0.96)");
@@ -892,6 +925,7 @@
     ctx.fill();
     ctx.restore();
 
+    // rim
     ctx.save();
     const rimGrad = ctx.createRadialGradient(cx,cy,outerR*0.92, cx,cy,outerR*1.06);
     rimGrad.addColorStop(0, "rgba(18,27,47,0.95)");
@@ -982,7 +1016,6 @@
     }
   }
 
-  // Strong spin
   const TWO_PI = Math.PI * 2;
   const SPIN_TURNS = 10;
   const SPIN_MS = 2600;
@@ -1001,13 +1034,12 @@
 
   const hudMain = document.getElementById("hudMain");
   const hudSub  = document.getElementById("hudSub");
-
   function setHUDSpinning(){
     hudMain.textContent = "ICE FISHING";
     hudSub.textContent = "spinning";
   }
 
-  // history
+  // history UI
   const historyBar = document.getElementById("historyBar");
   const history = [];
   const HISTORY_MAX = 18;
@@ -1023,15 +1055,18 @@
     }
   }
 
-  // LIVE SYNC + FIX HISTORY AFTER SPIN
+  // LIVE SYNC
   let timeOffset = 0;
   let scheduledForRoundId = null;
   let scheduledSpinTimer = null;
-  let lastAppliedHistoryRoundId = null;
 
-  // ✅ важное: после спина сразу добавляем результат
-  let pendingSpinRoundId = null;
-  let pendingSpinWinnerIndex = null;
+  // Серверная история обновляется на roundId-1
+  let lastServerHistoryRoundId = null;
+
+  // Чтобы история обновлялась сразу ПОСЛЕ ОСТАНОВКИ, но не “показывала заранее”
+  // мы добавляем в историю только после анимации, используя winner текущего раунда
+  let pendingRoundId = null;
+  let pendingWinner = null;
 
   function serverTimeNow(){ return Date.now() + timeOffset; }
 
@@ -1049,24 +1084,20 @@
     hudSub.textContent = "до спина";
   }
 
-  function applyHistoryFromServer(state){
-    const list = (state.history || []).slice();
-    list.sort((a,b) => a.roundId - b.roundId);
-    const last = list.slice(-HISTORY_MAX);
-
+  function applyServerHistory(state){
+    const list = (state.history || []).slice().sort((a,b)=>a.roundId-b.roundId);
     history.length = 0;
-    for (const item of last) history.push(item.winnerIndex);
+    for (const item of list.slice(-HISTORY_MAX)) history.push(item.winnerIndex);
     renderHistory();
-
-    lastAppliedHistoryRoundId = last.length ? last[last.length - 1].roundId : null;
+    lastServerHistoryRoundId = list.length ? list[list.length-1].roundId : null;
   }
 
   function scheduleSpinAtEnd(endAt, winnerIndex, roundId){
     if (scheduledSpinTimer) clearTimeout(scheduledSpinTimer);
 
-    // ✅ запоминаем, что этот спин должен в итоге попасть в историю
-    pendingSpinRoundId = roundId;
-    pendingSpinWinnerIndex = winnerIndex;
+    // Запомним, что после анимации надо добавить в историю
+    pendingRoundId = roundId;
+    pendingWinner = winnerIndex;
 
     const delay = Math.max(0, endAt - serverTimeNow());
     scheduledSpinTimer = setTimeout(() => { spinToWinner(winnerIndex); }, delay);
@@ -1099,17 +1130,14 @@
     spinning = false;
     drawWheel(null);
 
-    // ✅ СРАЗУ после остановки добавляем выпавшее в историю (без ожидания сервера)
-    if (pendingSpinRoundId !== null && pendingSpinWinnerIndex !== null) {
-      history.push(pendingSpinWinnerIndex);
+    // ✅ Добавляем в историю ТОЛЬКО ПОСЛЕ остановки
+    if (pendingRoundId !== null && pendingWinner !== null) {
+      history.push(pendingWinner);
       if (history.length > HISTORY_MAX) history.splice(0, history.length - HISTORY_MAX);
       renderHistory();
 
-      // это roundId текущего раунда, он “считается” зафиксированным для UI
-      lastAppliedHistoryRoundId = pendingSpinRoundId;
-
-      pendingSpinRoundId = null;
-      pendingSpinWinnerIndex = null;
+      pendingRoundId = null;
+      pendingWinner = null;
     }
   }
 
@@ -1118,22 +1146,19 @@
       const state = await fetchState();
       timeOffset = state.serverNow - Date.now();
 
-      // MAX roundId из server history
-      const list = state.history || [];
-      let maxRoundId = null;
-      for (const h of list){
-        if (typeof h?.roundId === "number"){
-          if (maxRoundId === null || h.roundId > maxRoundId) maxRoundId = h.roundId;
-        }
-      }
+      // серверный lastCompleted roundId
+      const serverLast = (state.history && state.history.length)
+        ? Math.max(...state.history.map(x => x.roundId))
+        : null;
 
-      // ✅ сервер догоняет — применяем только если сервер реально ушёл дальше
-      if (maxRoundId !== null && (lastAppliedHistoryRoundId === null || maxRoundId > lastAppliedHistoryRoundId)) {
-        applyHistoryFromServer(state);
+      // если серверная история реально изменилась — применяем (это убирает дубли и синхронизирует)
+      if (serverLast !== null && serverLast !== lastServerHistoryRoundId) {
+        applyServerHistory(state);
       }
 
       setHUDCountdown(state.round.endAt);
 
+      // планируем спин строго на endAt
       if (scheduledForRoundId !== state.round.roundId){
         scheduleSpinAtEnd(state.round.endAt, state.round.winnerIndex, state.round.roundId);
       }
@@ -1142,10 +1167,10 @@
 
   // init
   updateUndoState();
-  drawWheel(null);
-  renderHistory();
   syncWalletUI();
   refreshBalance();
+  drawWheel(null);
+  renderHistory();
   syncLoop();
   setInterval(syncLoop, 500);
   setInterval(refreshBalance, 5000);
