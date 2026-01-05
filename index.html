@@ -229,12 +229,8 @@
       color:#0b1220;
     }
 
-    .betRow{
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      gap:10px;
-    }
+    .betRow{ display:flex; justify-content:center; align-items:center; gap:10px; }
+
     .undoBtn{
       width:44px;
       height:44px;
@@ -564,26 +560,7 @@
     tg?.showPopup?.({ title, message, buttons:[{type:"ok"}] });
   }
 
-  // -------------------------
-  // ✅ TON payload fix (BOC)
-  // -------------------------
-  function bytesToBase64(bytes){
-    let bin = "";
-    for (const b of bytes) bin += String.fromCharCode(b);
-    return btoa(bin);
-  }
-  let _tonCore = null;
-  async function commentToBocBase64(comment){
-    if (!_tonCore){
-      _tonCore = await import("https://esm.sh/@ton/core@0.58.0");
-    }
-    const { beginCell } = _tonCore;
-    const cell = beginCell().storeUint(0, 32).storeStringTail(String(comment || "")).endCell();
-    const boc = cell.toBoc({ idx:false });
-    return bytesToBase64(boc);
-  }
-
-  // TON modal
+  // --- TON modal
   const tonModal = document.getElementById("tonModal");
   document.getElementById("tonConnectBtn").addEventListener("click", () => tonModal.classList.add("open"));
   document.getElementById("tonClose").addEventListener("click", () => tonModal.classList.remove("open"));
@@ -600,10 +577,20 @@
   const tonBtnText = document.getElementById("tonBtnText");
   const walletStatus = document.getElementById("walletStatus");
 
+  // локальный кэш баланса (чтобы ставки работали мгновенно)
+  let balanceTonCache = 0;
+
   function shortAddr(a){ return a ? (a.slice(0,6) + "..." + a.slice(-6)) : ""; }
   function getWalletAddress(){
     const w = window.__wallet;
     return w?.account?.address || localStorage.getItem("walletAddress") || null;
+  }
+
+  function setBalanceTonUI(v){
+    balanceTonCache = Number(v) || 0;
+    // красиво: 0 / 0.1 / 1 / 1.5 и т.д.
+    const s = (Math.round(balanceTonCache * 10) / 10).toFixed(1);
+    balanceValue.textContent = s.endsWith(".0") ? s.slice(0,-2) : s;
   }
 
   function syncWalletUI(){
@@ -611,7 +598,7 @@
     if (!addr){
       tonBtnText.textContent = "TON connect";
       walletStatus.textContent = "Not connected";
-      balanceValue.textContent = "0";
+      setBalanceTonUI(0);
       return;
     }
     localStorage.setItem("walletAddress", addr);
@@ -621,11 +608,25 @@
 
   async function refreshBalance(){
     const addr = getWalletAddress();
-    if (!addr){ balanceValue.textContent = "0"; return; }
+    if (!addr){ setBalanceTonUI(0); return; }
     const r = await fetch(`/api/balance?address=${encodeURIComponent(addr)}`, { cache:"no-store" });
     if (!r.ok) return;
     const j = await r.json();
-    balanceValue.textContent = String(j.balanceTon ?? 0);
+    setBalanceTonUI(j.balanceTon ?? 0);
+  }
+
+  async function adjustBalance(deltaTon){
+    const addr = getWalletAddress();
+    if (!addr) throw new Error("no_wallet");
+    const deltaNano = Math.trunc(Number(deltaTon) * 1e9);
+    const r = await fetch("/api/balance_adjust", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ address: addr, deltaNano })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok) throw new Error(j.error || "balance_adjust_failed");
+    setBalanceTonUI(j.balanceTon ?? balanceTonCache);
   }
 
   window.addEventListener("wallet_changed", async () => {
@@ -681,19 +682,21 @@
     const intent = await r.json();
 
     try{
+      // ВАЖНО: payload оставляем как есть в твоём проекте (если у тебя он уже работает для отправки)
+      // если ты используешь BOC payload — ок, если нет — тоже ок, т.к. сервер теперь ищет comment гибко.
       await window.__tonUI.sendTransaction({
         validUntil: Math.floor(Date.now()/1000) + 300,
         messages:[{
           address: intent.toAddress,
           amount: intent.amountNano,
-          payload: await commentToBocBase64(intent.comment)
+          // comment как payload (если кошелек не принимает — можно убрать payload вообще, но тогда нельзя будет найти депозит)
+          payload: btoa(unescape(encodeURIComponent(intent.comment)))
         }]
       });
 
       depositModal.classList.remove("open");
-      showPopup("TON", "Транзакция отправлена. Проверю через 45 секунд…");
+      showPopup("TON", "Транзакция отправлена. Проверяю через 45 секунд…");
 
-      // ✅ строго: ждём 45 секунд, как ты просил
       setTimeout(() => {
         waitAndCredit(intent.intentId, addr);
       }, 45_000);
@@ -704,8 +707,7 @@
   });
 
   async function waitAndCredit(intentId, address){
-    // после 45 секунд делаем короткий poll (например 30 секунд)
-    for (let i=0;i<15;i++){
+    for (let i=0;i<20;i++){
       const r = await fetch("/api/confirm_deposit", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
@@ -719,31 +721,26 @@
           showPopup("TON", `Баланс пополнен: +${j.creditedTon} TON`);
           return;
         }
-
-        if (j.status === "wait"){
-          // если сервер просит ещё немного подождать
-          await new Promise(res => setTimeout(res, Math.min(3000, j.retryAfterMs || 2000)));
-          continue;
-        }
       }
       await new Promise(res => setTimeout(res, 2000));
     }
-    showPopup("TON", "Не вижу транзакцию в сети. Подожди и попробуй снова (tonapi иногда лагает).");
+    showPopup("TON", "Не удалось подтвердить депозит (TonAPI может тормозить). Попробуй ещё раз чуть позже.");
   }
 
   document.getElementById("actionWithdraw").addEventListener("click", () => {
     showPopup("TON", "Вывод добавим следующим шагом.");
   });
 
-  // --- BETS + UNDO (как было)
+  // --- BETS + UNDO + BALANCE RULES ---
   let currentBet = 0.2;
   const betSelect = document.getElementById("betSelect");
   const betMenu = document.getElementById("betMenu");
   const betValue = document.getElementById("betValue");
   const undoBtn = document.getElementById("undoBtn");
 
-  const totals = new Map();
-  const actions = [];
+  const totals = new Map();    // target -> totalBetTon
+  const actions = [];          // stack for undo: {target, amountTon}
+
   function fmt(x){
     const s = (Math.round(x*10)/10).toFixed(1);
     return s.endsWith(".0") ? s.slice(0,-2) : s;
@@ -776,31 +773,64 @@
       btn.appendChild(badge);
     }
   }
-  function addBet(target, amount){
+
+  async function addBet(target, amountTon){
+    const addr = getWalletAddress();
+    if (!addr){ showPopup("Ставки", "Сначала привяжи кошелёк."); return; }
+
+    // ✅ нельзя поставить больше, чем баланс
+    if (balanceTonCache + 1e-9 < amountTon){
+      showPopup("Баланс", `Недостаточно средств. Нужно минимум ${fmt(amountTon)} TON`);
+      return;
+    }
+
+    // ✅ списываем на сервере и в UI
+    try{
+      await adjustBalance(-amountTon);
+    }catch(e){
+      showPopup("Баланс", "Не удалось списать баланс (проверь сервер).");
+      return;
+    }
+
     const prev = totals.get(target) || 0;
-    const next = Math.round((prev + amount) * 10) / 10;
+    const next = Math.round((prev + amountTon) * 10) / 10;
     totals.set(target, next);
-    actions.push({ target, amount });
+    actions.push({ target, amountTon });
     renderTotalOnButton(target);
     updateUndoState();
   }
-  function undoLast(){
+
+  async function undoLast(){
     if (actions.length === 0) return;
+
     const last = actions.pop();
     const prev = totals.get(last.target) || 0;
-    const next = Math.round((prev - last.amount) * 10) / 10;
+    const next = Math.round((prev - last.amountTon) * 10) / 10;
     if (next <= 0) totals.delete(last.target);
     else totals.set(last.target, next);
+
+    // ✅ возвращаем деньги на сервере
+    try{
+      await adjustBalance(+last.amountTon);
+    }catch{
+      // если сервер не ответил — вернём действие обратно
+      actions.push(last);
+      totals.set(last.target, prev);
+      showPopup("Баланс", "Не удалось вернуть баланс (сервер).");
+      return;
+    }
+
     renderTotalOnButton(last.target);
     updateUndoState();
   }
+
   undoBtn.addEventListener("click", (e) => { e.stopPropagation(); undoLast(); });
 
   document.querySelectorAll(".bettable").forEach(btn => {
     btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
 
-  // --- WHEEL + HISTORY (✅ фикс: не показывает следующий результат)
+  // --- WHEEL + HISTORY ---
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -819,9 +849,9 @@
   };
 
   const sectors = Array.from({length:N}, ()=>null);
-  sectors[IDX_HUGE] = { kind:"huge", label:"HUGE REDS", fill:COLORS.red, text:"#fff", icon:"fish" };
-  for (const i of IDX_ORANGES) sectors[i] = { kind:"orange", label:"BIG ORANGES", fill:COLORS.orange, text:"#1b1b1b", icon:"fish" };
-  for (const i of IDX_BLUES)   sectors[i] = { kind:"blue", label:"LIL BLUES", fill:COLORS.blue, text:"#fff", icon:"fish" };
+  sectors[IDX_HUGE] = { kind:"hugered", label:"HUGE REDS", fill:COLORS.red, text:"#fff", icon:"fish" };
+  for (const i of IDX_ORANGES) sectors[i] = { kind:"bigoranges", label:"BIG ORANGES", fill:COLORS.orange, text:"#1b1b1b", icon:"fish" };
+  for (const i of IDX_BLUES)   sectors[i] = { kind:"lilblues", label:"LIL BLUES", fill:COLORS.blue, text:"#fff", icon:"fish" };
 
   let leaf1Left = 23, leaf2Left = 23;
   let toggle = 0;
@@ -867,75 +897,6 @@
     return Math.floor(rel / step);
   }
   function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
-
-  function drawFishIcon(x,y,scale,fill){
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.scale(scale, scale);
-    ctx.fillStyle = fill;
-
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 14, 9, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.moveTo(-14, 0);
-    ctx.lineTo(-26, -10);
-    ctx.lineTo(-26, 10);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
-    ctx.beginPath();
-    ctx.arc(8, -2, 2.2, 0, Math.PI*2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawLeafIcon(x,y,scale,stroke){
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.scale(scale, scale);
-
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = 2.6;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    ctx.beginPath();
-    ctx.moveTo(0, 12);
-    ctx.quadraticCurveTo(18, 2, 0, -14);
-    ctx.quadraticCurveTo(-18, 2, 0, 12);
-    ctx.closePath();
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(0, 10);
-    ctx.lineTo(0, -12);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  function drawVerticalChars(text, x, y, fill){
-    const t = text.replace(/'/g,"").replace(/\s+/g," ").trim();
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.fillStyle = fill;
-    ctx.font = "900 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    const lineH = 11;
-    const maxLen = 10;
-    const s = t.slice(0, maxLen);
-    const totalH = (s.length-1)*lineH;
-
-    for (let i=0;i<s.length;i++){
-      ctx.fillText(s[i], 0, -totalH/2 + i*lineH);
-    }
-    ctx.restore();
-  }
 
   function drawWheel(highlightIdx=null){
     ctx.clearRect(0,0,W,H);
@@ -988,24 +949,6 @@
       ctx.strokeStyle = "rgba(255,255,255,0.20)";
       ctx.lineWidth = 1.1;
       ctx.stroke();
-
-      const mid = (a0+a1)/2;
-      const iconR = outerR*0.82;
-
-      ctx.save();
-      ctx.rotate(mid);
-      ctx.translate(iconR, 0);
-
-      if (sec.icon === "fish"){
-        drawFishIcon(0, 0, 1.05, "rgba(255,255,255,0.92)");
-        ctx.rotate(Math.PI/2);
-        drawVerticalChars(sec.label, 0, 92, sec.text);
-      } else {
-        const stroke = (sec.kind === "leaf1") ? "rgba(17,24,39,0.65)" : "rgba(255,255,255,0.82)";
-        drawLeafIcon(0, 0, 0.9, stroke);
-      }
-
-      ctx.restore();
     }
 
     ctx.restore();
@@ -1059,12 +1002,12 @@
 
   const hudMain = document.getElementById("hudMain");
   const hudSub  = document.getElementById("hudSub");
+
   function setHUDSpinning(){
     hudMain.textContent = "ICE FISHING";
     hudSub.textContent = "spinning";
   }
 
-  // history UI
   const historyBar = document.getElementById("historyBar");
   const history = [];
   const HISTORY_MAX = 18;
@@ -1080,17 +1023,12 @@
     }
   }
 
-  // -------------------------
-  // ✅ LIVE SYNC + HISTORY FIX
-  // -------------------------
+  // ✅ LIVE SYNC + FIX “следующий результат”
   let timeOffset = 0;
   let scheduledForRoundId = null;
   let scheduledSpinTimer = null;
 
-  // что сервер уже “закоммитил” в истории
   let lastServerHistoryRoundId = null;
-
-  // что мы уже добавили локально после завершения анимации
   let lastCommittedRoundId = null;
 
   function serverTimeNow(){ return Date.now() + timeOffset; }
@@ -1124,14 +1062,46 @@
     scheduledForRoundId = roundId;
   }
 
+  function clearAllBetsUI(){
+    totals.clear();
+    actions.length = 0;
+    document.querySelectorAll(".bettable").forEach(btn => {
+      const old = btn.querySelector(".placedBet");
+      if (old) old.remove();
+    });
+    updateUndoState();
+  }
+
+  async function payoutIfWin(winnerIndex){
+    const sec = sectors[winnerIndex];
+    if (!sec) return;
+
+    // ✅ выплаты только по leaf1/leaf2: ставка * 2
+    if (sec.kind === "leaf1" || sec.kind === "leaf2"){
+      const target = sec.kind;
+      const stakeTon = totals.get(target) || 0;
+      if (stakeTon > 0){
+        const payoutTon = stakeTon * 2;
+        try{
+          await adjustBalance(+payoutTon);
+          showPopup("Выигрыш", `Выпало ${target.toUpperCase()}! +${payoutTon} TON`);
+        }catch{
+          showPopup("Ошибка", "Не удалось начислить выигрыш (сервер).");
+        }
+      }
+    }
+
+    // бонусы пока 0 — ничего не делаем
+  }
+
   async function spinToWinner(winnerIndex, roundId){
     if (spinning) return;
     spinning = true;
     setHUDSpinning();
 
-    const target = buildStrongTarget(winnerIndex);
+    const targetAngle = buildStrongTarget(winnerIndex);
     const start = angle;
-    const end = target;
+    const end = targetAngle;
     const t0 = performance.now();
 
     await new Promise(resolve=>{
@@ -1149,16 +1119,20 @@
     spinning = false;
     drawWheel(null);
 
-    // ✅ ДОБАВЛЯЕМ В ИСТОРИЮ ТОЛЬКО ТОТ ИМЕННО ROUND, КОТОРЫЙ КРУТИЛСЯ
+    // ✅ история: добавляем ТОЛЬКО тот roundId, который реально крутился
     const serverDone = (lastServerHistoryRoundId !== null && roundId <= lastServerHistoryRoundId);
     const localDone = (lastCommittedRoundId !== null && roundId <= lastCommittedRoundId);
-
     if (!serverDone && !localDone){
       history.push(winnerIndex);
       if (history.length > HISTORY_MAX) history.splice(0, history.length - HISTORY_MAX);
       renderHistory();
       lastCommittedRoundId = roundId;
     }
+
+    // ✅ выплаты + очистка ставок после раунда
+    await payoutIfWin(winnerIndex);
+    clearAllBetsUI();
+    await refreshBalance();
   }
 
   async function syncLoop(){
@@ -1183,7 +1157,6 @@
   }
 
   // init
-  updateUndoState();
   syncWalletUI();
   refreshBalance();
   drawWheel(null);
