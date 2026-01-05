@@ -654,10 +654,23 @@
     setBalanceTonUI(j.balanceTon ?? balanceTonCache);
   }
 
-  window.addEventListener("wallet_changed", async () => {
-    syncWalletUI();
-    await refreshBalance();
-  });
+window.addEventListener("wallet_changed", async () => {
+  syncWalletUI();
+  await refreshBalance();
+
+  // ✅ сохраняем привязку tg user -> wallet в Redis
+  try{
+    const addr = getWalletAddress();
+    const initData = window.Telegram?.WebApp?.initData || "";
+    if (addr && initData){
+      await fetch("/api/bind_wallet", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ initData, walletAddress: addr })
+      });
+    }
+  }catch{}
+});
 
   // Bind
   document.getElementById("actionBind").addEventListener("click", async () => {
