@@ -6,12 +6,11 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-const PERIOD_MS = 10000; // 10 секунд
+const PERIOD_MS = 10000;
 const N = 53;
 const HISTORY_MAX = 18;
 
-// если lastRoundId “улетел” слишком далеко (из будущего/прошлого) — пересобираем историю
-const MAX_ROUND_DRIFT = 60 * 60; // 1 час в раундах (при 10 сек = 360 раундов, но тут с запасом)
+const MAX_ROUND_DRIFT = 60 * 60;
 
 function winnerForRound(roundId) {
   const seed = process.env.WHEEL_SEED || "dev-seed";
@@ -37,22 +36,17 @@ async function ensureHistoryUpTo(lastCompletedRoundId) {
   const lastRaw = await redis.get("wheel:lastRoundId");
   const last = lastRaw === null ? null : Number(lastRaw);
 
-  // если пусто — создаём
   if (last === null || Number.isNaN(last)) {
     await rebuildHistory(lastCompletedRoundId);
     return;
   }
 
-  // ✅ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ:
-  // если last > текущего завершённого — значит Redis “из будущего” -> пересобираем
-  // если last слишком далеко в прошлом — тоже пересобираем (на всякий)
   const drift = Math.abs(last - lastCompletedRoundId);
   if (last > lastCompletedRoundId || drift > MAX_ROUND_DRIFT) {
     await rebuildHistory(lastCompletedRoundId);
     return;
   }
 
-  // нормальный сценарий — дописываем недостающие
   if (last < lastCompletedRoundId) {
     for (let r = last + 1; r <= lastCompletedRoundId; r++) {
       await redis.rpush("wheel:history", JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) }));
@@ -73,7 +67,6 @@ export default async function handler(req, res) {
     const roundId = Math.floor(now / PERIOD_MS);
     const startAt = roundId * PERIOD_MS;
     const endAt = startAt + PERIOD_MS;
-
     const lastCompletedRoundId = Math.max(0, roundId - 1);
 
     await ensureHistoryUpTo(lastCompletedRoundId);
