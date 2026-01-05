@@ -22,22 +22,16 @@ function normAddr(a) {
   return String(a || "").trim().toLowerCase();
 }
 
-// TonAPI может прятать комментарий в разных местах
-function extractPossibleComment(inMsg) {
+function extractCommentAny(inMsg) {
   if (!inMsg) return "";
 
-  // 1) классика
   if (typeof inMsg.message === "string" && inMsg.message.trim()) return inMsg.message.trim();
 
-  // 2) decoded_body.text (часто так)
-  if (inMsg.decoded_body && typeof inMsg.decoded_body.text === "string" && inMsg.decoded_body.text.trim()) {
-    return inMsg.decoded_body.text.trim();
-  }
+  const decoded = inMsg.decoded_body;
+  if (decoded && typeof decoded.text === "string" && decoded.text.trim()) return decoded.text.trim();
 
-  // 3) иногда comment/text лежит иначе — пробуем найти строку в JSON
   try {
-    const s = JSON.stringify(inMsg);
-    return s; // вернём строку, ниже будем делать includes
+    return JSON.stringify(inMsg);
   } catch {
     return "";
   }
@@ -53,17 +47,18 @@ export default async function handler(req, res) {
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
     const intentId = String(body.intentId || "");
-    const address = String(body.address || "");
+    const address = String(body.address || ""); // привязанный кошелек
     if (!intentId || !address) return res.status(400).json({ error: "bad_request" });
 
     const intentRaw = await redis.get(`dep:intent:${intentId}`);
     if (!intentRaw) return res.status(404).json({ error: "intent_not_found" });
     const intent = typeof intentRaw === "string" ? JSON.parse(intentRaw) : intentRaw;
 
-    // ждём минимум 45 сек от createdAt
+    // Ждём минимум 45 сек от createdAt
     const createdAt = Number(intent.createdAt || 0);
-    if (createdAt && Date.now() - createdAt < MIN_WAIT_MS) {
-      return res.status(200).json({ status: "wait", retryAfterMs: MIN_WAIT_MS - (Date.now() - createdAt) });
+    const age = Date.now() - createdAt;
+    if (createdAt && age < MIN_WAIT_MS) {
+      return res.status(200).json({ status: "wait", retryAfterMs: MIN_WAIT_MS - age });
     }
 
     const creditedKey = `dep:credited:${intentId}`;
@@ -75,8 +70,9 @@ export default async function handler(req, res) {
     const wantComment = String(intent.comment || "").trim();
     const wantAmount = String(intent.amountNano || "0");
 
-    // берём побольше транзакций
-    const txs = await tonapiGetJson(`/blockchain/accounts/${encodeURIComponent(TO_ADDRESS)}/transactions?limit=50`);
+    const txs = await tonapiGetJson(
+      `/blockchain/accounts/${encodeURIComponent(TO_ADDRESS)}/transactions?limit=80`
+    );
 
     let found = null;
 
@@ -84,11 +80,11 @@ export default async function handler(req, res) {
       const inMsg = tx.in_msg;
       if (!inMsg) continue;
 
-      // сумма
+      // amount
       const amount = String(inMsg.value || "0");
       if (amount !== wantAmount) continue;
 
-      // sender обязателен и должен совпасть
+      // sender MUST exist and must match bound wallet
       const src =
         inMsg.source?.address ||
         inMsg.source ||
@@ -99,17 +95,9 @@ export default async function handler(req, res) {
       if (!src) continue;
       if (normAddr(src) !== normAddr(address)) continue;
 
-      // comment ищем гибко
-      const extracted = extractPossibleComment(inMsg);
-
-      // если extracted это ровно comment
-      if (typeof extracted === "string" && extracted.trim() === wantComment) {
-        found = tx;
-        break;
-      }
-
-      // если extracted это JSON-string (fallback) — проверяем contains
-      if (typeof extracted === "string" && extracted.includes(wantComment)) {
+      // comment
+      const c = extractCommentAny(inMsg);
+      if (c === wantComment || (c && c.includes(wantComment))) {
         found = tx;
         break;
       }
@@ -117,13 +105,14 @@ export default async function handler(req, res) {
 
     if (!found) return res.status(200).json({ status: "pending" });
 
-    // зачисляем
+    // credit
     const balKey = `bal:${address}`;
     const cur = Number((await redis.get(balKey)) || "0");
     const next = cur + Number(intent.amountNano);
 
     await redis.set(balKey, String(next));
     await redis.set(creditedKey, "1", { ex: 60 * 60 * 24 });
+
     await redis.set(
       `dep:intent:${intentId}`,
       JSON.stringify({ ...intent, status: "credited", creditedAt: Date.now() }),
