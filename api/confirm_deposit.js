@@ -8,7 +8,7 @@ const redis = new Redis({
 const TONAPI_KEY = process.env.TONAPI_KEY;
 const TO_ADDRESS = process.env.TREASURY_TON_ADDRESS;
 
-const MIN_WAIT_MS = 45_000; // 45 секунд
+const MIN_WAIT_MS = 45_000;
 
 async function tonapiGetJson(path) {
   const r = await fetch(`https://tonapi.io/v2${path}`, {
@@ -22,6 +22,27 @@ function normAddr(a) {
   return String(a || "").trim().toLowerCase();
 }
 
+// TonAPI может прятать комментарий в разных местах
+function extractPossibleComment(inMsg) {
+  if (!inMsg) return "";
+
+  // 1) классика
+  if (typeof inMsg.message === "string" && inMsg.message.trim()) return inMsg.message.trim();
+
+  // 2) decoded_body.text (часто так)
+  if (inMsg.decoded_body && typeof inMsg.decoded_body.text === "string" && inMsg.decoded_body.text.trim()) {
+    return inMsg.decoded_body.text.trim();
+  }
+
+  // 3) иногда comment/text лежит иначе — пробуем найти строку в JSON
+  try {
+    const s = JSON.stringify(inMsg);
+    return s; // вернём строку, ниже будем делать includes
+  } catch {
+    return "";
+  }
+}
+
 export default async function handler(req, res) {
   try {
     res.setHeader("Cache-Control", "no-store");
@@ -32,40 +53,30 @@ export default async function handler(req, res) {
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
     const intentId = String(body.intentId || "");
-    const address = String(body.address || ""); // привязанный кошелек
+    const address = String(body.address || "");
     if (!intentId || !address) return res.status(400).json({ error: "bad_request" });
 
     const intentRaw = await redis.get(`dep:intent:${intentId}`);
     if (!intentRaw) return res.status(404).json({ error: "intent_not_found" });
-
     const intent = typeof intentRaw === "string" ? JSON.parse(intentRaw) : intentRaw;
 
-    // 1) Задержка 45 секунд после создания intent
+    // ждём минимум 45 сек от createdAt
     const createdAt = Number(intent.createdAt || 0);
-    const age = Date.now() - createdAt;
-    if (createdAt && age < MIN_WAIT_MS) {
-      return res.status(200).json({
-        status: "wait",
-        retryAfterMs: MIN_WAIT_MS - age,
-      });
+    if (createdAt && Date.now() - createdAt < MIN_WAIT_MS) {
+      return res.status(200).json({ status: "wait", retryAfterMs: MIN_WAIT_MS - (Date.now() - createdAt) });
     }
 
     const creditedKey = `dep:credited:${intentId}`;
     const already = await redis.get(creditedKey);
     if (already) {
-      return res.status(200).json({
-        status: "credited",
-        creditedTon: Number(intent.amountNano) / 1e9,
-      });
+      return res.status(200).json({ status: "credited", creditedTon: Number(intent.amountNano) / 1e9 });
     }
 
     const wantComment = String(intent.comment || "").trim();
     const wantAmount = String(intent.amountNano || "0");
 
-    // 2) Смотрим входящие транзакции на treasury
-    const txs = await tonapiGetJson(
-      `/blockchain/accounts/${encodeURIComponent(TO_ADDRESS)}/transactions?limit=50`
-    );
+    // берём побольше транзакций
+    const txs = await tonapiGetJson(`/blockchain/accounts/${encodeURIComponent(TO_ADDRESS)}/transactions?limit=50`);
 
     let found = null;
 
@@ -73,15 +84,11 @@ export default async function handler(req, res) {
       const inMsg = tx.in_msg;
       if (!inMsg) continue;
 
-      // сумма должна совпасть
+      // сумма
       const amount = String(inMsg.value || "0");
       if (amount !== wantAmount) continue;
 
-      // comment должен совпасть
-      const msg = String(inMsg.message || "").trim();
-      if (msg !== wantComment) continue;
-
-      // sender обязан быть и обязан совпасть с привязанным кошельком
+      // sender обязателен и должен совпасть
       const src =
         inMsg.source?.address ||
         inMsg.source ||
@@ -89,34 +96,42 @@ export default async function handler(req, res) {
         inMsg.src ||
         "";
 
-      if (!src) continue; // строго: без src не зачисляем
+      if (!src) continue;
       if (normAddr(src) !== normAddr(address)) continue;
 
-      found = tx;
-      break;
+      // comment ищем гибко
+      const extracted = extractPossibleComment(inMsg);
+
+      // если extracted это ровно comment
+      if (typeof extracted === "string" && extracted.trim() === wantComment) {
+        found = tx;
+        break;
+      }
+
+      // если extracted это JSON-string (fallback) — проверяем contains
+      if (typeof extracted === "string" && extracted.includes(wantComment)) {
+        found = tx;
+        break;
+      }
     }
 
     if (!found) return res.status(200).json({ status: "pending" });
 
-    // 3) Зачисляем баланс НА ТОТ ЖЕ address (привязанный = отправитель)
+    // зачисляем
     const balKey = `bal:${address}`;
-    const current = Number((await redis.get(balKey)) || "0");
-    const next = current + Number(intent.amountNano);
+    const cur = Number((await redis.get(balKey)) || "0");
+    const next = cur + Number(intent.amountNano);
 
     await redis.set(balKey, String(next));
-
-    await redis.set(creditedKey, "1", { ex: 60 * 60 * 24 }); // 24h
+    await redis.set(creditedKey, "1", { ex: 60 * 60 * 24 });
     await redis.set(
       `dep:intent:${intentId}`,
       JSON.stringify({ ...intent, status: "credited", creditedAt: Date.now() }),
       { ex: 60 * 60 }
     );
 
-    return res.status(200).json({
-      status: "credited",
-      creditedTon: Number(intent.amountNano) / 1e9,
-    });
+    return res.status(200).json({ status: "credited", creditedTon: Number(intent.amountNano) / 1e9 });
   } catch (e) {
-    return res.status(500).json({ error: "confirm_error", message: String(e) });
+    res.status(500).json({ error: "confirm_error", message: String(e) });
   }
 }
