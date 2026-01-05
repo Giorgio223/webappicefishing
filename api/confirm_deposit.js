@@ -2,7 +2,7 @@ import { Redis } from "@upstash/redis";
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  token: process.env.UPSTASH_REST_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
 const TONAPI_KEY = process.env.TONAPI_KEY;
@@ -29,10 +29,10 @@ export default async function handler(req, res) {
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
     const intentId = String(body.intentId || "").trim();
-    const userWallet = String(body.address || "").trim(); // ✅ должны прислать UQ/EQ
+    const userWallet = String(body.address || "").trim(); // ✅ должен быть UQ/EQ
     if (!intentId || !userWallet) return res.status(400).json({ error: "bad_request" });
 
-    // ✅ запрещаем raw ключи bal:0:...
+    // ✅ запрет raw адресов
     if (userWallet.startsWith("0:")) {
       return res.status(400).json({ error: "bad_wallet_format", message: "Use friendly UQ/EQ address" });
     }
@@ -57,7 +57,7 @@ export default async function handler(req, res) {
     const wantAmountNano = String(intent.amountNano || "0");
     const createdAtSec = createdAt ? Math.floor(createdAt / 1000) : 0;
 
-    const txs = await tonapiGet(`/blockchain/accounts/${encodeURIComponent(TREASURY)}/transactions?limit=140`);
+    const txs = await tonapiGet(`/blockchain/accounts/${encodeURIComponent(TREASURY)}/transactions?limit=160`);
     const list = (txs.transactions || []);
 
     let found = null;
@@ -77,7 +77,6 @@ export default async function handler(req, res) {
 
     if (!found) return res.status(200).json({ status: "pending" });
 
-    // ✅ CREDIT
     const balKey = `bal:${userWallet}`;
     const cur = Number((await redis.get(balKey)) || "0");
     const next = cur + Number(intent.amountNano);
