@@ -5,36 +5,30 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-const TONAPI_KEY = process.env.TONAPI_KEY;
 const TO_ADDRESS = process.env.TREASURY_TON_ADDRESS;
+
+const TONCENTER_ENDPOINT = process.env.TONCENTER_ENDPOINT || "https://toncenter.com/api/v2";
+const TONCENTER_API_KEY = process.env.TONCENTER_API_KEY || ""; // можно пустым, если у тебя без ключа работает
 
 const MIN_WAIT_MS = 45_000;
 
-async function tonapiGetJson(path) {
-  const r = await fetch(`https://tonapi.io/v2${path}`, {
-    headers: TONAPI_KEY ? { Authorization: `Bearer ${TONAPI_KEY}` } : {},
-  });
-  if (!r.ok) throw new Error(`tonapi_${r.status}`);
-  return await r.json();
+function norm(s) {
+  return String(s || "").trim().toLowerCase();
 }
 
-function normAddr(a) {
-  return String(a || "").trim().toLowerCase();
-}
+// TON Center v2: /getTransactions?address=...&limit=...
+async function toncenterGetTransactions(address, limit = 50) {
+  const url = new URL(TONCENTER_ENDPOINT + "/getTransactions");
+  url.searchParams.set("address", address);
+  url.searchParams.set("limit", String(limit));
+  if (TONCENTER_API_KEY) url.searchParams.set("api_key", TONCENTER_API_KEY);
 
-function extractCommentAny(inMsg) {
-  if (!inMsg) return "";
-
-  if (typeof inMsg.message === "string" && inMsg.message.trim()) return inMsg.message.trim();
-
-  const decoded = inMsg.decoded_body;
-  if (decoded && typeof decoded.text === "string" && decoded.text.trim()) return decoded.text.trim();
-
-  try {
-    return JSON.stringify(inMsg);
-  } catch {
-    return "";
+  const r = await fetch(url.toString(), { headers: { "Accept": "application/json" } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.ok === false) {
+    throw new Error(`toncenter_error:${r.status}:${j.error || "unknown"}`);
   }
+  return j.result || [];
 }
 
 export default async function handler(req, res) {
@@ -42,25 +36,25 @@ export default async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     if (req.method !== "POST") return res.status(405).json({ error: "method" });
 
-    if (!TONAPI_KEY) return res.status(500).json({ error: "no_tonapi_key" });
     if (!TO_ADDRESS) return res.status(500).json({ error: "no_treasury_address" });
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
     const intentId = String(body.intentId || "");
-    const address = String(body.address || ""); // привязанный кошелек
+    const address = String(body.address || ""); // привязанный кошелек (sender)
     if (!intentId || !address) return res.status(400).json({ error: "bad_request" });
 
     const intentRaw = await redis.get(`dep:intent:${intentId}`);
     if (!intentRaw) return res.status(404).json({ error: "intent_not_found" });
     const intent = typeof intentRaw === "string" ? JSON.parse(intentRaw) : intentRaw;
 
-    // Ждём минимум 45 сек от createdAt
+    // wait 45s
     const createdAt = Number(intent.createdAt || 0);
     const age = Date.now() - createdAt;
     if (createdAt && age < MIN_WAIT_MS) {
       return res.status(200).json({ status: "wait", retryAfterMs: MIN_WAIT_MS - age });
     }
 
+    // already credited?
     const creditedKey = `dep:credited:${intentId}`;
     const already = await redis.get(creditedKey);
     if (already) {
@@ -68,36 +62,28 @@ export default async function handler(req, res) {
     }
 
     const wantComment = String(intent.comment || "").trim();
-    const wantAmount = String(intent.amountNano || "0");
+    const wantAmountNano = String(intent.amountNano || "0");
 
-    const txs = await tonapiGetJson(
-      `/blockchain/accounts/${encodeURIComponent(TO_ADDRESS)}/transactions?limit=80`
-    );
+    // fetch last txs of treasury
+    const txs = await toncenterGetTransactions(TO_ADDRESS, 80);
 
+    // TON Center tx format: each tx has in_msg { source, value, message }
     let found = null;
 
-    for (const tx of (txs.transactions || [])) {
+    for (const tx of txs) {
       const inMsg = tx.in_msg;
       if (!inMsg) continue;
 
-      // amount
-      const amount = String(inMsg.value || "0");
-      if (amount !== wantAmount) continue;
+      const value = String(inMsg.value || "0");
+      if (value !== wantAmountNano) continue;
 
-      // sender MUST exist and must match bound wallet
-      const src =
-        inMsg.source?.address ||
-        inMsg.source ||
-        inMsg.src?.address ||
-        inMsg.src ||
-        "";
-
+      const src = inMsg.source;
       if (!src) continue;
-      if (normAddr(src) !== normAddr(address)) continue;
+      if (norm(src) !== norm(address)) continue;
 
-      // comment
-      const c = extractCommentAny(inMsg);
-      if (c === wantComment || (c && c.includes(wantComment))) {
+      const msg = String(inMsg.message || "").trim();
+      // comment may be exact or included
+      if (msg === wantComment || (msg && msg.includes(wantComment))) {
         found = tx;
         break;
       }
@@ -105,7 +91,7 @@ export default async function handler(req, res) {
 
     if (!found) return res.status(200).json({ status: "pending" });
 
-    // credit
+    // credit balance
     const balKey = `bal:${address}`;
     const cur = Number((await redis.get(balKey)) || "0");
     const next = cur + Number(intent.amountNano);
@@ -121,6 +107,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ status: "credited", creditedTon: Number(intent.amountNano) / 1e9 });
   } catch (e) {
-    res.status(500).json({ error: "confirm_error", message: String(e) });
+    return res.status(500).json({ error: "confirm_error", message: String(e) });
   }
 }
