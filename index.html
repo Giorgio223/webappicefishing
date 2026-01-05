@@ -561,8 +561,13 @@
     }
   })();
 
+  // ✅ FIX: popup fallback (если не Telegram WebApp или popup недоступен)
   function showPopup(title, message){
-    tg?.showPopup?.({ title, message, buttons:[{type:"ok"}] });
+    if (tg?.showPopup){
+      tg.showPopup({ title, message, buttons:[{type:"ok"}] });
+    } else {
+      alert(`${title}\n\n${message}`);
+    }
   }
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -614,8 +619,9 @@
 
   function setBalanceTonUI(v){
     balanceTonCache = Number(v) || 0;
-    const s = (Math.round(balanceTonCache * 10) / 10).toFixed(1);
-    balanceValue.textContent = s.endsWith(".0") ? s.slice(0,-2) : s;
+    // показываем красиво: 0 / 0.1 / 1.25
+    const s = (Math.round(balanceTonCache * 1000) / 1000).toString();
+    balanceValue.textContent = s;
   }
 
   function syncWalletUI(){
@@ -631,36 +637,36 @@
     walletStatus.textContent = shortAddr(addr);
   }
 
-async function refreshBalance(){
-  try{
+  // ✅ FIX: refreshBalance умеет читать разные форматы ответа
+  async function refreshBalance(){
     const addr = getWalletAddress();
-    if (!addr){
-      // если кошелёк не подключен, показываем 0
-      const el = document.getElementById("tonBalance");
-      if (el) el.textContent = "0";
-      return 0;
-    }
+    if (!addr){ setBalanceTonUI(0); return 0; }
 
     const r = await fetch(`/api/balance?address=${encodeURIComponent(addr)}`, { cache:"no-store" });
+    if (!r.ok) return balanceTonCache;
+
     const j = await r.json().catch(()=>({}));
 
-    const ton = Number(j.ton ?? j.balanceTon ?? 0); // поддержка разных форматов
-    const tonFixed = (Math.round(ton * 1000) / 1000).toString();
+    // поддержка:
+    // - { balanceTon: number }
+    // - { ton: number }
+    // - { nano: number } (нанотоны)
+    let ton = 0;
 
-    // ✅ сюда ставим баланс на экране
-    const el = document.getElementById("tonBalance");
-    if (el) el.textContent = tonFixed;
+    if (typeof j.balanceTon === "number") ton = j.balanceTon;
+    else if (typeof j.ton === "number") ton = j.ton;
+    else if (typeof j.nano === "number") ton = j.nano / 1e9;
+    else if (typeof j.nano === "string" && j.nano) ton = Number(j.nano) / 1e9;
 
-    // если у тебя есть кэш/переменная баланса — обновим тоже
-    window.balanceTonCache = ton;
+    // если сервер отдаёт строкой
+    if (!Number.isFinite(ton) && typeof j.balanceTon === "string") ton = Number(j.balanceTon);
+    if (!Number.isFinite(ton) && typeof j.ton === "string") ton = Number(j.ton);
 
+    if (!Number.isFinite(ton)) ton = 0;
+
+    setBalanceTonUI(ton);
     return ton;
-  }catch(e){
-    console.log("refreshBalance error", e);
-    return 0;
   }
-}
-
 
   async function adjustBalance(deltaTon){
     const addr = getWalletAddress();
@@ -673,26 +679,27 @@ async function refreshBalance(){
     });
     const j = await r.json().catch(()=>({}));
     if (!r.ok) throw new Error(j.error || "balance_adjust_failed");
-    setBalanceTonUI(j.balanceTon ?? balanceTonCache);
+    // после списания/возврата всегда перерисуем
+    await refreshBalance();
   }
 
-window.addEventListener("wallet_changed", async () => {
-  syncWalletUI();
-  await refreshBalance();
+  window.addEventListener("wallet_changed", async () => {
+    syncWalletUI();
+    await refreshBalance();
 
-  // ✅ сохраняем привязку tg user -> wallet в Redis
-  try{
-    const addr = getWalletAddress();
-    const initData = window.Telegram?.WebApp?.initData || "";
-    if (addr && initData){
-      await fetch("/api/bind_wallet", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ initData, walletAddress: addr })
-      });
-    }
-  }catch{}
-});
+    // ✅ сохраняем привязку tg user -> wallet в Redis
+    try{
+      const addr = getWalletAddress();
+      const initData = window.Telegram?.WebApp?.initData || "";
+      if (addr && initData){
+        await fetch("/api/bind_wallet", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({ initData, walletAddress: addr })
+        });
+      }
+    }catch{}
+  });
 
   // Bind
   document.getElementById("actionBind").addEventListener("click", async () => {
@@ -763,34 +770,38 @@ window.addEventListener("wallet_changed", async () => {
     }
   });
 
-async function waitAndCredit(intentId, address){
-  // ✅ всегда кредитим баланс именно кошелька пользователя (TonConnect)
-  const userAddr = (typeof getWalletAddress === "function" ? getWalletAddress() : "") || "";
-  const creditAddr = userAddr || address;
-
-  for (let i=0;i<20;i++){
-    const r = await fetch("/api/confirm_deposit", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ intentId, address: creditAddr })
-    });
-
-    if (r.ok){
-      const j = await r.json();
-      if (j.status === "credited"){
-        await refreshBalance();
-        showPopup("TON", `Баланс пополнен: +${j.creditedTon} TON`);
-        return;
-      }
-      // можно показать статус ожидания
-      // if (j.status === "wait") console.log("wait", j.retryAfterMs);
+  // ✅ FIX: waitAndCredit всегда использует кошелёк пользователя и после credited делает двойной refresh
+  async function waitAndCredit(intentId){
+    const addr = getWalletAddress();
+    if (!addr){
+      showPopup("TON", "Сначала подключи кошелёк.");
+      return;
     }
 
-    await sleep(2000);
-  }
+    for (let i=0;i<30;i++){
+      const r = await fetch("/api/confirm_deposit", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ intentId, address: addr })
+      });
 
-  showPopup("TON", "Не удалось подтвердить депозит. Попробуй ещё раз позже.");
-}
+      if (r.ok){
+        const j = await r.json().catch(()=>({}));
+
+        if (j.status === "credited"){
+          // двойной refresh — чтобы UI точно обновился
+          await refreshBalance();
+          setTimeout(refreshBalance, 300);
+          showPopup("TON", `Баланс пополнен: +${j.creditedTon} TON`);
+          return;
+        }
+      }
+
+      await sleep(2000);
+    }
+
+    showPopup("TON", "Не удалось подтвердить депозит. Попробуй ещё раз позже.");
+  }
 
   // --- BETS + UNDO + BALANCE RULES ---
   let currentBet = 0.2;
@@ -839,6 +850,7 @@ async function waitAndCredit(intentId, address){
     const addr = getWalletAddress();
     if (!addr){ showPopup("Ставки", "Сначала привяжи кошелёк."); return; }
 
+    // ✅ проверка минимального баланса
     if (balanceTonCache + 1e-9 < amountTon){
       showPopup("Баланс", `Недостаточно средств. Нужно минимум ${fmt(amountTon)} TON`);
       return;
@@ -1235,7 +1247,7 @@ async function waitAndCredit(intentId, address){
       return;
     }
 
-    // fish bonuses x1 (вернуть ставку)
+    // fish bonuses x1
     if (sec.kind === "lilblues" || sec.kind === "bigoranges" || sec.kind === "hugered"){
       const stake = totals.get(sec.kind) || 0;
       if (stake > 0){
