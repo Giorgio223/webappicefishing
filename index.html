@@ -733,7 +733,7 @@ window.addEventListener("wallet_changed", async () => {
       showPopup("TON", "Транзакция отправлена. Проверяю через 45 секунд…");
 
       setTimeout(() => {
-        waitAndCredit(intent.intentId, addr);
+        waitAndCredit(intent.intentId);
       }, 45_000);
 
     }catch(e){
