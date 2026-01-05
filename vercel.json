@@ -9,10 +9,9 @@
       ]
     }
   ],
-  "rewrites": [
-    { "source": "/tonconnect-manifest.json", "destination": "/tonconnect-manifest.json" },
-    { "source": "/ton.png", "destination": "/ton.png" },
-    { "source": "/bg.png", "destination": "/bg.png" },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "routes": [
+    { "src": "/tonconnect-manifest.json", "dest": "/tonconnect-manifest.json" },
+    { "src": "/ton.png", "dest": "/ton.png" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
