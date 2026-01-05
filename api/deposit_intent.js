@@ -6,53 +6,56 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-const TO_ADDRESS = process.env.TREASURY_TON_ADDRESS;
+const TREASURY = process.env.TREASURY_TON_ADDRESS;
 
-function toNanoString(ton) {
-  return String(Math.floor(ton * 1e9));
+function toNanoSafe(amountTon) {
+  const n = Number(amountTon);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  // безопасно: округляем до 9 знаков, потом переводим в nano
+  const fixed = Math.round(n * 1e9);
+  return fixed;
 }
 
 export default async function handler(req, res) {
   try {
     res.setHeader("Cache-Control", "no-store");
     if (req.method !== "POST") return res.status(405).json({ error: "method" });
-
-    if (!TO_ADDRESS) return res.status(500).json({ error: "no_treasury_address" });
+    if (!TREASURY) return res.status(500).json({ error: "no_treasury_address" });
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
     const amountTon = Number(body.amountTon);
 
-    if (!amountTon || amountTon <= 0) return res.status(400).json({ error: "bad_amount" });
-    if (amountTon < 0.1) return res.status(400).json({ error: "min_amount_0_1" });
+    if (!Number.isFinite(amountTon) || amountTon <= 0) return res.status(400).json({ error: "bad_amount" });
+    if (amountTon < 0.1) return res.status(400).json({ error: "min_0_1" });
+
+    const baseNano = toNanoSafe(amountTon);
+    if (baseNano === null) return res.status(400).json({ error: "bad_amount" });
+
+    // ✅ уникальный хвост (1..999 nanoTON) — не влияет на игрока, но делает депозит уникальным
+    const tail = 1 + Math.floor(Math.random() * 999);
+    const amountNano = String(baseNano + tail);
+
+    // точное значение TON, чтобы показать пользователю (до 9 знаков)
+    const amountTonExact = (Number(amountNano) / 1e9);
 
     const intentId = crypto.randomBytes(16).toString("hex");
-    const comment = `ICEFISHING_DEPOSIT:${intentId}`;
-    const amountNano = toNanoString(amountTon);
+    const comment = `ICEFISHING_DEPOSIT:${intentId}`; // можно оставить для удобства, но подтверждение будет по amountNano
 
-    await redis.set(
-      `dep:intent:${intentId}`,
-      JSON.stringify({
-        intentId,
-        toAddress: TO_ADDRESS,
-        amountNano,
-        amountTon,
-        comment,
-        createdAt: Date.now(),
-        status: "created",
-      }),
-      { ex: 60 * 30 }
-    );
-
-    // payload будет собираться на фронте как BOC (Cell)
-    res.status(200).json({
+    const intent = {
       intentId,
-      toAddress: TO_ADDRESS,
-      amountTon,
-      amountNano,
+      toAddress: TREASURY,
+      amountNano,         // ✅ именно эту сумму отправляем
+      amountTon,          // то, что ввёл
+      amountTonExact,     // ✅ то, что реально надо отправить (с хвостом)
       comment,
       createdAt: Date.now(),
-    });
+      status: "created",
+    };
+
+    await redis.set(`dep:intent:${intentId}`, JSON.stringify(intent), { ex: 60 * 60 });
+
+    return res.status(200).json(intent);
   } catch (e) {
-    res.status(500).json({ error: "deposit_intent_error", message: String(e) });
+    return res.status(500).json({ error: "deposit_intent_error", message: String(e) });
   }
 }
