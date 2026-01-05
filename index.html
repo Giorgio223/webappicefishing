@@ -613,9 +613,23 @@
 
   function shortAddr(a){ return a ? (a.slice(0,6) + "..." + a.slice(-6)) : ""; }
   function getWalletAddress(){
-    const w = window.__wallet;
-    return w?.account?.address || localStorage.getItem("walletAddress") || null;
+  // 1) всегда приоритет TonConnect (он даёт friendly UQ/EQ)
+  const w = window.__wallet;
+  const a = w?.account?.address || "";
+  if (a && !a.startsWith("0:")) return a;
+
+  // 2) fallback из localStorage — но ТОЛЬКО если это friendly, raw игнорируем
+  const ls = localStorage.getItem("walletAddress") || "";
+  if (ls && !ls.startsWith("0:")) return ls;
+
+  // 3) если в localStorage лежит raw, чистим чтобы не ломало всё дальше
+  if (ls && ls.startsWith("0:")) {
+    localStorage.removeItem("walletAddress");
   }
+
+  return null;
+}
+
 
   function setBalanceTonUI(v){
     balanceTonCache = Number(v) || 0;
