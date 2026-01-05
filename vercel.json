@@ -1,0 +1,18 @@
+{
+  "headers": [
+    {
+      "source": "/tonconnect-manifest.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json; charset=utf-8" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    }
+  ],
+  "rewrites": [
+    { "source": "/tonconnect-manifest.json", "destination": "/tonconnect-manifest.json" },
+    { "source": "/ton.png", "destination": "/ton.png" },
+    { "source": "/bg.png", "destination": "/bg.png" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
