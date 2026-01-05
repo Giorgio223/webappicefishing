@@ -1,13 +1,15 @@
 import { Redis } from "@upstash/redis";
+import crypto from "crypto";
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ADMIN_ID = Number(process.env.ADMIN_TELEGRAM_ID || "0");
-const SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;               // ENV
+const ADMIN_ID = Number(process.env.ADMIN_TELEGRAM_ID || "0");  // ENV (581727401)
+const SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";       // ENV
+const WEBAPP_URL = "https://www.icefishing.business/";          // твой сайт
 
 function toNanoInt(ton) {
   const n = Number(ton);
@@ -15,7 +17,7 @@ function toNanoInt(ton) {
   return Math.floor(n * 1e9);
 }
 
-async function tgSendMessage(chatId, text) {
+async function tgSendMessage(chatId, text, opts = {}) {
   if (!BOT_TOKEN) return;
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: "POST",
@@ -24,6 +26,7 @@ async function tgSendMessage(chatId, text) {
       chat_id: chatId,
       text,
       disable_web_page_preview: true,
+      ...opts,
     }),
   });
 }
@@ -36,6 +39,10 @@ function parseUpdate(update) {
   return { text: String(text), fromId, chatId };
 }
 
+function isLikelyWallet(s) {
+  return typeof s === "string" && s.length >= 20;
+}
+
 async function creditWalletBalance(walletAddress, deltaNano) {
   const key = `bal:${walletAddress}`;
   const cur = Number((await redis.get(key)) || "0");
@@ -44,17 +51,11 @@ async function creditWalletBalance(walletAddress, deltaNano) {
   return next;
 }
 
-function isLikelyWallet(s) {
-  // простая эвристика: TON адреси часто длинные и содержат EQ / UQ и т.п.
-  return typeof s === "string" && s.length >= 20;
-}
-
 async function resolveWalletByTarget(target) {
   // target может быть:
   // 1) @username
-  // 2) numeric tgId
-  // 3) wallet address напрямую
-
+  // 2) tgId (цифры)
+  // 3) wallet address (EQ.../UQ...)
   if (!target) return { ok: false, reason: "no_target" };
 
   // wallet directly
@@ -87,9 +88,12 @@ async function resolveWalletByTarget(target) {
 export default async function handler(req, res) {
   try {
     res.setHeader("Cache-Control", "no-store");
-    if (req.method !== "POST") return res.status(405).json({ ok: false, error: "method" });
 
-    // защита webhook secret token
+    if (req.method !== "POST") {
+      return res.status(405).json({ ok: false, error: "method" });
+    }
+
+    // ✅ Защита Webhook секретом (который задаёшь в setWebhook secret_token)
     if (SECRET) {
       const headerSecret =
         req.headers["x-telegram-bot-api-secret-token"] ||
@@ -105,50 +109,77 @@ export default async function handler(req, res) {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
     const { text, fromId, chatId } = parseUpdate(body);
 
-    // Telegram ждёт быстрый 200
+    // Telegram нужен быстрый 200 OK
     res.status(200).json({ ok: true });
 
     if (!chatId) return;
 
-    if (Number(fromId) !== ADMIN_ID) {
-      await tgSendMessage(chatId, "❌ Нет доступа.");
-      return;
-    }
+    const t = String(text || "").trim();
 
-    const t = text.trim();
-
+    // ✅ /start и /help — ДЛЯ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
     if (t === "/start" || t === "/help") {
       await tgSendMessage(
         chatId,
-        "Админ команды:\n" +
-          "/topup @username amountTon\n" +
-          "/topup tgId amountTon\n" +
-          "/topup walletAddress amountTon\n" +
-          "/who @username\n" +
-          "/bal walletAddress\n\n" +
-          "Пример:\n/topup @vasya 1.5"
+        "🎣 IceFishing\nНажми кнопку, чтобы открыть игру:",
+        {
+          reply_markup: {
+            inline_keyboard: [[{ text: "▶️ Открыть IceFishing", url: WEBAPP_URL }]],
+          },
+        }
       );
       return;
     }
 
-    if (t.startsWith("/who")) {
-      const parts = t.split(/\s+/);
-      const target = parts[1];
-      if (!target || !target.startsWith("@")) {
-        await tgSendMessage(chatId, "Используй: /who @username");
-        return;
-      }
-      const uname = target.slice(1).toLowerCase();
-      const tgIdStr = await redis.get(`tg:username:${uname}`);
-      if (!tgIdStr) {
-        await tgSendMessage(chatId, `❌ @${uname} не найден (он должен 1 раз открыть WebApp после привязки).`);
-        return;
-      }
-      const wallet = await redis.get(`tg:wallet:${tgIdStr}`);
-      await tgSendMessage(chatId, `@${uname} -> tgId=${tgIdStr}\nwallet=${wallet || "не привязан"}`);
+    // Ниже — только админ
+    const isAdmin = Number(fromId) === ADMIN_ID;
+    if (!isAdmin) {
+      // молча игнорим любые другие сообщения от не-админов
       return;
     }
 
+    // ✅ выдача одноразовой ссылки в админку
+    if (t === "/admin") {
+      const tok = crypto.randomBytes(24).toString("hex");
+      await redis.set(`admin:token:${tok}`, "1", { ex: 60 * 5 }); // 5 минут
+
+      const link = `https://www.icefishing.business/admin.html?token=${tok}`;
+      await tgSendMessage(chatId, "🔐 Админ-вход (5 минут):\n" + link);
+      return;
+    }
+
+    // ✅ кто такой @username / tgId (проверка привязки)
+    if (t.startsWith("/who")) {
+      const parts = t.split(/\s+/);
+      const target = parts[1];
+
+      if (!target) {
+        await tgSendMessage(chatId, "Используй: /who @username  (или /who tgId)");
+        return;
+      }
+
+      if (target.startsWith("@")) {
+        const uname = target.slice(1).toLowerCase();
+        const tgIdStr = await redis.get(`tg:username:${uname}`);
+        if (!tgIdStr) {
+          await tgSendMessage(chatId, `❌ @${uname} не найден (он должен 1 раз зайти в WebApp и привязать кошелёк).`);
+          return;
+        }
+        const wallet = await redis.get(`tg:wallet:${tgIdStr}`);
+        await tgSendMessage(chatId, `@${uname} -> tgId=${tgIdStr}\nwallet=${wallet || "не привязан"}`);
+        return;
+      }
+
+      if (/^\d+$/.test(target)) {
+        const wallet = await redis.get(`tg:wallet:${target}`);
+        await tgSendMessage(chatId, `tgId=${target}\nwallet=${wallet || "не привязан"}`);
+        return;
+      }
+
+      await tgSendMessage(chatId, "Формат: /who @username  или  /who tgId");
+      return;
+    }
+
+    // ✅ баланс по кошельку
     if (t.startsWith("/bal")) {
       const parts = t.split(/\s+/);
       const wallet = parts[1];
@@ -161,13 +192,21 @@ export default async function handler(req, res) {
       return;
     }
 
+    // ✅ топап
     if (t.toLowerCase().startsWith("/topup")) {
       const parts = t.split(/\s+/);
       const target = parts[1];
       const amountTon = parts[2];
 
       if (!target || !amountTon) {
-        await tgSendMessage(chatId, "Используй: /topup @username amountTon\nПример: /topup @vasya 0.5");
+        await tgSendMessage(
+          chatId,
+          "Используй:\n" +
+            "/topup @username amountTon\n" +
+            "/topup tgId amountTon\n" +
+            "/topup walletAddress amountTon\n\n" +
+            "Пример: /topup @vasya 1.5"
+        );
         return;
       }
 
@@ -181,9 +220,9 @@ export default async function handler(req, res) {
       if (!resolved.ok) {
         const msg =
           resolved.reason === "username_not_found"
-            ? "❌ Username не найден. Важно: пользователь должен 1 раз зайти в WebApp, привязать кошелёк — тогда username появится."
+            ? "❌ Username не найден. Пользователь должен 1 раз открыть WebApp и привязать кошелёк."
             : resolved.reason === "user_has_no_wallet"
-            ? "❌ У пользователя нет привязанного кошелька (или он ещё не заходил в WebApp после привязки)."
+            ? "❌ У пользователя нет привязанного кошелька."
             : "❌ Неверный формат. Используй /topup @username amount";
         await tgSendMessage(chatId, msg);
         return;
@@ -198,6 +237,9 @@ export default async function handler(req, res) {
       );
       return;
     }
+
+    // Если команда неизвестна:
+    await tgSendMessage(chatId, "Команды:\n/admin\n/topup\n/who\n/bal");
   } catch (e) {
     try {
       if (!res.headersSent) res.status(500).json({ ok: false, error: "webhook_error", message: String(e) });
