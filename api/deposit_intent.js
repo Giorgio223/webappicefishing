@@ -12,10 +12,6 @@ function toNanoString(ton) {
   return String(Math.floor(ton * 1e9));
 }
 
-function commentToBase64(comment) {
-  return Buffer.from(comment, "utf8").toString("base64");
-}
-
 export default async function handler(req, res) {
   try {
     res.setHeader("Cache-Control", "no-store");
@@ -39,6 +35,7 @@ export default async function handler(req, res) {
         intentId,
         toAddress: TO_ADDRESS,
         amountNano,
+        amountTon,
         comment,
         createdAt: Date.now(),
         status: "created",
@@ -46,15 +43,14 @@ export default async function handler(req, res) {
       { ex: 60 * 30 }
     );
 
+    // ВАЖНО: payload мы НЕ делаем base64(строки). На фронте сделаем правильный BOC.
     res.status(200).json({
       intentId,
       toAddress: TO_ADDRESS,
       amountTon,
       amountNano,
-      // ВАЖНО: comment вернём отдельно, фронт закодирует его в правильный BOC payload (Cell)
       comment,
-      // Оставляю для совместимости, но это НЕ правильный TON payload (это просто base64 строки)
-      payloadBase64: commentToBase64(comment),
+      createdAt: Date.now(),
     });
   } catch (e) {
     res.status(500).json({ error: "deposit_intent_error", message: String(e) });
