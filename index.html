@@ -631,14 +631,36 @@
     walletStatus.textContent = shortAddr(addr);
   }
 
-  async function refreshBalance(){
+async function refreshBalance(){
+  try{
     const addr = getWalletAddress();
-    if (!addr){ setBalanceTonUI(0); return; }
+    if (!addr){
+      // если кошелёк не подключен, показываем 0
+      const el = document.getElementById("tonBalance");
+      if (el) el.textContent = "0";
+      return 0;
+    }
+
     const r = await fetch(`/api/balance?address=${encodeURIComponent(addr)}`, { cache:"no-store" });
-    if (!r.ok) return;
-    const j = await r.json();
-    setBalanceTonUI(j.balanceTon ?? 0);
+    const j = await r.json().catch(()=>({}));
+
+    const ton = Number(j.ton ?? j.balanceTon ?? 0); // поддержка разных форматов
+    const tonFixed = (Math.round(ton * 1000) / 1000).toString();
+
+    // ✅ сюда ставим баланс на экране
+    const el = document.getElementById("tonBalance");
+    if (el) el.textContent = tonFixed;
+
+    // если у тебя есть кэш/переменная баланса — обновим тоже
+    window.balanceTonCache = ton;
+
+    return ton;
+  }catch(e){
+    console.log("refreshBalance error", e);
+    return 0;
   }
+}
+
 
   async function adjustBalance(deltaTon){
     const addr = getWalletAddress();
