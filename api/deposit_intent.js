@@ -3,7 +3,7 @@ import crypto from "crypto";
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  token: process.env.UPSTASH_REST_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
 const TREASURY = process.env.TREASURY_TON_ADDRESS;
