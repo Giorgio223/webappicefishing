@@ -35,6 +35,7 @@ export default async function handler(req, res) {
         intentId,
         toAddress: TO_ADDRESS,
         amountNano,
+        amountTon,
         comment,
         createdAt: Date.now(),
         status: "created",
@@ -42,7 +43,15 @@ export default async function handler(req, res) {
       { ex: 60 * 30 }
     );
 
-    res.status(200).json({ intentId, toAddress: TO_ADDRESS, amountTon, amountNano, comment, createdAt: Date.now() });
+    // payload будет собираться на фронте как BOC (Cell)
+    res.status(200).json({
+      intentId,
+      toAddress: TO_ADDRESS,
+      amountTon,
+      amountNano,
+      comment,
+      createdAt: Date.now(),
+    });
   } catch (e) {
     res.status(500).json({ error: "deposit_intent_error", message: String(e) });
   }
