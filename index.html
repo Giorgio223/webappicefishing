@@ -15,7 +15,6 @@
       --red:#e11d48;
       --orange:#fb923c;
       --blue:#0b2a8f;
-      --ring:#0b1220;
     }
     *{box-sizing:border-box}
     body{
@@ -78,7 +77,7 @@
     }
     .hudText{
       font-weight:950; letter-spacing:.6px; color:#0b1220; line-height:1;
-      min-width:180px; text-transform:uppercase;
+      min-width:120px; text-transform:uppercase;
       text-shadow: 0 6px 18px rgba(0,0,0,.12);
     }
     .hudText small{
@@ -135,57 +134,42 @@
     }
     canvas{ width:100%; height:100%; border-radius:50%; display:block; }
 
-    /* ✅ TOP RED FLEX POINTER (12 o’clock) */
-    .skidPointer{
+    /* ✅ TOP RED POINTER (12h), shorter, no transparent part, no sharp tip */
+    .pointer{
       position:absolute;
       left:50%;
-      top:-18px;
+      top:-14px;
       transform: translateX(-50%);
-      width:140px;
-      height:80px;
+      width:120px;
+      height:60px;
       pointer-events:none;
       z-index:10;
-      filter: drop-shadow(0 14px 14px rgba(0,0,0,.25));
+      filter: drop-shadow(0 12px 12px rgba(0,0,0,.22));
     }
-
-    /* крепление убрано (как ты просил), оставляем только палочку+наконечник */
-    .skidRod{
+    .pointerRod{
       position:absolute;
       left:50%;
-      top:18px;
+      top:12px;
       width:8px;
-      height:52px;
-      transform: translateX(-50%) rotate(0deg) skewX(0deg);
+      height:42px;
+      transform: translateX(-50%) rotate(0deg) skewX(0deg) scaleY(1);
       transform-origin: 50% 0%;
       border-radius:999px;
       background: linear-gradient(180deg, #ff4d4d, #c81d25);
       border:1px solid rgba(0,0,0,.18);
-      box-shadow: inset 0 2px 0 rgba(255,255,255,.22);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,.18);
     }
-    .skidTip{
+    .pointerTip{
       position:absolute;
       left:50%;
-      top:64px;
-      width:20px;
-      height:12px;
+      top:52px;
+      width:16px;
+      height:10px;
       transform: translateX(-50%);
       border-radius:999px;
-      background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(230,240,255,.65));
-      border:1px solid rgba(0,0,0,.12);
-      box-shadow: 0 10px 16px rgba(0,0,0,.14);
-    }
-    /* острее */
-    .skidTip:before{
-      content:"";
-      position:absolute;
-      left:50%;
-      top:-6px;
-      transform:translateX(-50%);
-      width:0;height:0;
-      border-left:7px solid transparent;
-      border-right:7px solid transparent;
-      border-bottom:8px solid rgba(255,255,255,.85);
-      filter: drop-shadow(0 2px 2px rgba(0,0,0,.10));
+      background: rgba(200, 29, 37, .96);
+      border:1px solid rgba(0,0,0,.16);
+      box-shadow: 0 10px 14px rgba(0,0,0,.14);
     }
 
     /* bottom UI */
@@ -434,18 +418,17 @@
   <div class="leftHUD">
     <div class="cube"></div>
     <div class="hudText">
-      <span id="hudMain">10</span>
-      <small id="hudSub">до спина</small>
+      <span id="hudMain">0</span>
+      <small id="hudSub"></small>
     </div>
   </div>
 
   <div class="wheelWrap">
     <canvas id="wheel" width="900" height="900"></canvas>
 
-    <!-- ✅ pointer TOP -->
-    <div class="skidPointer" aria-hidden="true">
-      <div class="skidRod" id="skidRod"></div>
-      <div class="skidTip" id="skidTip"></div>
+    <div class="pointer" aria-hidden="true">
+      <div class="pointerRod" id="pointerRod"></div>
+      <div class="pointerTip" id="pointerTip"></div>
     </div>
   </div>
 
@@ -553,7 +536,6 @@
   if (tg) { tg.ready(); tg.expand(); }
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
   function showPopup(title, message){
     if (tg?.showPopup){
       tg.showPopup({ title, message, buttons:[{type:"ok"}] });
@@ -643,7 +625,6 @@
     const boc = cell.toBoc({ idx:false });
     return bytesToBase64(boc);
   }
-
   function shortAddr(a){ return a ? (a.slice(0,6) + "..." + a.slice(-6)) : ""; }
 
   /* wallet LS */
@@ -724,7 +705,6 @@
   /* UI refs */
   const tonModal = document.getElementById("tonModal");
   const depositModal = document.getElementById("depositModal");
-
   const balanceValue = document.getElementById("balanceValue");
   const tonBtnText = document.getElementById("tonBtnText");
   const walletStatus = document.getElementById("walletStatus");
@@ -805,7 +785,6 @@
     await refreshBalance();
   });
 
-  /* actions */
   document.getElementById("actionBind").addEventListener("click", async () => {
     if (window.__tonUI?.openModal) { await window.__tonUI.openModal(); return; }
     showPopup("TON", "TonConnect не загрузился или manifest не доступен.");
@@ -829,7 +808,6 @@
     showPopup("TON", "Вывод добавим позже.");
   });
 
-  /* confirm helper */
   async function confirmDepositTry(intentId, addressRaw){
     try{
       const r = await fetch("/api/confirm_deposit", {
@@ -847,15 +825,11 @@
       return { ok: r2.ok, json: j2 };
     }
   }
-
   async function waitAndCreditSilent(intentId){
     const raw = await getAddressRawForApi();
     if (!raw) return;
-
-    // 2 минуты тихо
     for (let i=0;i<80;i++){
       const { ok, json } = await confirmDepositTry(intentId, raw);
-
       if (ok && json?.status === "credited"){
         await refreshBalance();
         setTimeout(refreshBalance, 350);
@@ -895,7 +869,6 @@
       });
 
       depositModal.classList.remove("open");
-      // без уведомлений “проверка”
       setTimeout(() => waitAndCreditSilent(intent.intentId), 9000);
     }catch(e){
       console.log(e);
@@ -987,7 +960,8 @@
     btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
 
-  /* Wheel config */
+  /* ========= WHEEL SYNC (MOST IMPORTANT) ========= */
+
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -1042,23 +1016,19 @@
   const outerR = Math.min(W,H)*0.47;
   const innerR = outerR*0.22;
 
-  let angle = 0;
-  let spinning = false;
-
   function normalize(a){
     const t = Math.PI*2;
     return ((a%t)+t)%t;
   }
 
-  /* pointer at TOP = -PI/2 */
+  /* pointer TOP = -PI/2 */
   const pointerWorld = -Math.PI/2;
 
-  function indexAtPointer(a){
-    const rel = normalize(pointerWorld - a - startOffset);
+  function indexAtPointer(angle){
+    const rel = normalize(pointerWorld - angle - startOffset);
     return Math.floor(rel / step);
   }
 
-  /* icons */
   function drawFishIcon(x,y,scale,fill){
     ctx.save();
     ctx.translate(x,y);
@@ -1082,6 +1052,7 @@
     ctx.fill();
     ctx.restore();
   }
+
   function drawLeafIcon(x,y,scale,stroke){
     ctx.save();
     ctx.translate(x,y);
@@ -1106,6 +1077,7 @@
 
     ctx.restore();
   }
+
   function drawVerticalChars(text, x, y, fill){
     const t = (text || "").replace(/\s+/g," ").trim();
     ctx.save();
@@ -1124,8 +1096,7 @@
     ctx.restore();
   }
 
-  /* ornaments between 53 sectors */
-  function drawOrnaments(){
+  function drawOrnaments(angle){
     ctx.save();
     ctx.translate(cx,cy);
     ctx.rotate(angle);
@@ -1149,7 +1120,7 @@
     ctx.restore();
   }
 
-  function drawWheel(highlightIdx=null){
+  function drawWheel(angle, highlightIdx=null){
     ctx.clearRect(0,0,W,H);
 
     // ice base
@@ -1224,13 +1195,14 @@
     }
     ctx.restore();
 
-    drawOrnaments();
+    drawOrnaments(angle);
   }
 
-  /* History */
+  /* History (server only) */
   const historyBar = document.getElementById("historyBar");
   const history = [];
   const HISTORY_MAX = 18;
+
   function renderHistory(){
     historyBar.innerHTML = "";
     for (const idx of history){
@@ -1242,235 +1214,223 @@
     }
   }
 
-  /* Server state sync */
+  /* Server state + time sync */
   let timeOffset = 0;
-  let scheduledForRoundId = null;
-  let scheduledSpinTimer = null;
-  let lastServerHistoryRoundId = null;
-  let lastCommittedRoundId = null;
-
-  // ✅ 15 sec delay after spin end
-  const POST_SPIN_DELAY_SEC = 15;
-  let postSpinUntil = 0; // serverTime ms
-
   function serverTimeNow(){ return Date.now() + timeOffset; }
+
   async function fetchState(){
     const r = await fetch("/api/state", { cache:"no-store" });
     if (!r.ok) throw new Error("api_state_error");
     return await r.json();
   }
 
-  const hudMain = document.getElementById("hudMain");
-  const hudSub  = document.getElementById("hudSub");
+  /* ========= SYNCHRONIZED PHASE =========
+     We compute wheel angle purely from time and current state.
+  */
 
-  function setHUDCountdown(endAt){
-    if (spinning) return;
-
-    const now = serverTimeNow();
-
-    // ✅ post-spin 15 sec
-    if (now < postSpinUntil){
-      const left = Math.max(0, Math.ceil((postSpinUntil - now)/1000));
-      hudMain.textContent = String(left);
-      hudSub.textContent = "до новой игры";
-      return;
-    }
-
-    const leftMs = endAt - now;
-    const sec = Math.max(0, Math.ceil(leftMs / 1000));
-    hudMain.textContent = String(sec);
-    hudSub.textContent = "до спина";
-  }
-
-  function applyServerHistory(state){
-    const curRoundId = state?.round?.roundId;
-    const listAll = (state.history || []).slice().sort((a,b)=>a.roundId-b.roundId);
-    const list = (typeof curRoundId === "number")
-      ? listAll.filter(x => x.roundId < curRoundId)
-      : listAll;
-
-    history.length = 0;
-    for (const item of list.slice(-HISTORY_MAX)) history.push(item.winnerIndex);
-    renderHistory();
-    lastServerHistoryRoundId = list.length ? list[list.length-1].roundId : null;
-  }
-
-  /* SPIN */
-  const TWO_PI = Math.PI * 2;
-  const SPIN_TURNS = 22;
+  // Spin should last 8.6s and finish exactly at endAt
   const SPIN_MS = 8600;
+  const SPIN_TURNS = 22;
+  const POST_DELAY_MS = 15000;
 
-  function getDesiredModForWinner(winnerIdx){
+  function easeOutQuint(t){ return 1 - Math.pow(1-t, 5); }
+
+  function desiredAngleForWinner(winnerIdx){
     const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
     return normalize(pointerWorld - winnerCenter);
   }
-  function buildStrongTarget(winnerIdx){
-    const desiredMod = getDesiredModForWinner(winnerIdx);
-    const base = angle - SPIN_TURNS * TWO_PI;
-    const k = Math.floor((base - desiredMod) / TWO_PI);
-    return desiredMod + k * TWO_PI;
-  }
-  function easeOutQuint(t){ return 1 - Math.pow(1-t, 5); }
 
-  function scheduleSpinAtEnd(endAt, winnerIndex, roundId){
-    if (scheduledSpinTimer) clearTimeout(scheduledSpinTimer);
-
-    const startAt = endAt - SPIN_MS;
-    const delay = Math.max(0, startAt - serverTimeNow());
-
-    scheduledSpinTimer = setTimeout(() => {
-      spinToWinner(winnerIndex, roundId);
-    }, delay);
-
-    scheduledForRoundId = roundId;
+  function buildTargetAngleFromStart(startAngle, winnerIdx){
+    const desiredMod = desiredAngleForWinner(winnerIdx);
+    // make target = desiredMod - K*2pi such that it's <= startAngle - turns*2pi (strictly "forward")
+    const base = startAngle - SPIN_TURNS * Math.PI * 2;
+    const k = Math.floor((base - desiredMod) / (Math.PI*2));
+    return desiredMod + k * (Math.PI*2);
   }
 
-  async function payout(winnerIndex){
-    const sec = sectors[winnerIndex];
-    if (!sec) return;
-    const stake = totals.get(sec.kind) || 0;
-    if (stake <= 0) return;
+  // Current rendered angle
+  let renderAngle = 0;
 
-    const pay = (sec.kind === "leaf1" || sec.kind === "leaf2") ? stake * 2 : stake * 1;
-    await adjustBalance(+pay);
-    showPopup("Выигрыш", `Выпало ${sec.label || sec.kind.toUpperCase()}! +${pay} TON`);
-  }
+  // Latest server state snapshot
+  let S = null;
 
-  function clearAllBetsUI(){
-    totals.clear();
-    actions.length = 0;
-    document.querySelectorAll(".bettable").forEach(btn => {
-      const old = btn.querySelector(".placedBet");
-      if (old) old.remove();
-    });
-    updateUndoState();
-  }
+  // Derived per-round anchors
+  let anchorRoundId = null;
+  let anchorStartAngle = 0;   // angle at spinStartAt
+  let anchorTargetAngle = 0;  // angle at endAt
+  let anchorWinner = 0;
+  let anchorSpinStartAt = 0;
+  let anchorEndAt = 0;
 
-  /* ✅ pointer “flex” */
-  const skidRod = document.getElementById("skidRod");
-  const skidTip = document.getElementById("skidTip");
-  let lastFrameAngle = 0;
-  let lastFrameTime = 0;
-  let rodFlex = 0;
-  function updateSkidFlex(now){
-    if (!lastFrameTime){
-      lastFrameTime = now;
-      lastFrameAngle = angle;
+  // pointer flex
+  const pointerRod = document.getElementById("pointerRod");
+  const pointerTip = document.getElementById("pointerTip");
+  let lastRAFTime = 0;
+  let lastRAFAngle = 0;
+  let flex = 0;
+
+  function updatePointerFlex(now){
+    if (!lastRAFTime){
+      lastRAFTime = now;
+      lastRAFAngle = renderAngle;
       return;
     }
-    const dt = Math.max(1, now - lastFrameTime);
-    const da = angle - lastFrameAngle;
+    const dt = Math.max(1, now - lastRAFTime);
+    const da = renderAngle - lastRAFAngle;
     const omega = Math.abs(da) / dt; // rad/ms
-    const target = Math.min(1, omega * 130);
 
-    rodFlex += (target - rodFlex) * 0.18;
+    const target = Math.min(1, omega * 120);
+    flex += (target - flex) * 0.18;
 
-    const rot = -(rodFlex * 14);       // вверх (инверсия)
-    const skew = -(rodFlex * 10);
-    const squash = 1 - rodFlex * 0.10;
+    // slight bend (top pointer -> negative)
+    const rot = -(flex * 10);
+    const skew = -(flex * 8);
+    const squash = 1 - flex * 0.08;
 
-    skidRod.style.transform = `translateX(-50%) rotate(${rot}deg) skewX(${skew}deg) scaleY(${squash})`;
-    skidTip.style.transform = `translateX(-50%) translateY(${rodFlex * 2}px)`;
+    pointerRod.style.transform = `translateX(-50%) rotate(${rot}deg) skewX(${skew}deg) scaleY(${squash})`;
+    pointerTip.style.transform = `translateX(-50%) translateY(${flex * 1.6}px)`;
 
-    lastFrameTime = now;
-    lastFrameAngle = angle;
+    lastRAFTime = now;
+    lastRAFAngle = renderAngle;
   }
 
-  async function spinToWinner(winnerIndex, roundId){
-    if (spinning) return;
-    spinning = true;
+  function applyState(state){
+    S = state;
+    timeOffset = (state.serverNow || Date.now()) - Date.now();
 
-    hudMain.textContent = "ICE FISHING";
-    hudSub.textContent = "spinning";
+    // update history strictly from server
+    const curRoundId = state?.round?.roundId;
+    const listAll = (state.history || []).slice().sort((a,b)=>a.roundId-b.roundId);
+    const finished = (typeof curRoundId === "number") ? listAll.filter(x => x.roundId < curRoundId) : listAll;
 
-    const target = buildStrongTarget(winnerIndex);
-    const start = angle;
-    const end = target;
-    const t0 = performance.now();
+    history.length = 0;
+    for (const item of finished.slice(-HISTORY_MAX)) history.push(item.winnerIndex);
+    renderHistory();
 
-    await new Promise(resolve=>{
-      function frame(now){
-        const t = Math.min(1, (now - t0) / SPIN_MS);
-        const k = easeOutQuint(t);
-        angle = start + (end - start) * k;
+    const rid = state.round.roundId;
+    const winner = state.round.winnerIndex;
+    const endAt = state.round.endAt;
+    const spinStartAt = endAt - SPIN_MS;
 
-        const hi = indexAtPointer(angle);
-        drawWheel(hi);
-        updateSkidFlex(now);
+    // If round changed, recompute anchors.
+    // Anchor start angle = final angle of previous round (from server history), so late joiners are synced.
+    if (anchorRoundId !== rid || anchorWinner !== winner || anchorEndAt !== endAt){
+      anchorRoundId = rid;
+      anchorWinner = winner;
+      anchorEndAt = endAt;
+      anchorSpinStartAt = spinStartAt;
 
-        if (t < 1) requestAnimationFrame(frame);
-        else resolve();
+      const lastFinished = finished.length ? finished[finished.length-1] : null;
+      const prevWinnerIdx = lastFinished ? lastFinished.winnerIndex : null;
+
+      // previous final angle
+      if (typeof prevWinnerIdx === "number"){
+        anchorStartAngle = desiredAngleForWinner(prevWinnerIdx);
+      } else {
+        // if no history yet, keep current renderAngle as start to avoid jump
+        anchorStartAngle = renderAngle;
       }
-      requestAnimationFrame(frame);
-    });
 
-    spinning = false;
-    drawWheel(null);
+      anchorTargetAngle = buildTargetAngleFromStart(anchorStartAngle, winner);
+    }
+  }
 
-    // fish confetti
-    const sec = sectors[winnerIndex];
-    if (sec?.icon === "fish") celebrateFish(sec.kind);
+  // HUD: only countdown number
+  const hudMain = document.getElementById("hudMain");
+  const hudSub  = document.getElementById("hudSub");
 
-    try{ await payout(winnerIndex); }catch{}
-    clearAllBetsUI();
-    await refreshBalance();
+  function setHUD(){
+    if (!S) { hudMain.textContent = "0"; hudSub.textContent = ""; return; }
 
-    // ✅ history только после остановки
-    await sleep(400);
-    const serverDone = (lastServerHistoryRoundId !== null && roundId <= lastServerHistoryRoundId);
-    const localDone  = (lastCommittedRoundId !== null && roundId <= lastCommittedRoundId);
-    if (!serverDone && !localDone){
-      history.push(winnerIndex);
-      if (history.length > HISTORY_MAX) history.splice(0, history.length - HISTORY_MAX);
-      renderHistory();
-      lastCommittedRoundId = roundId;
+    const now = serverTimeNow();
+    const spinStartAt = anchorSpinStartAt;
+    const endAt = anchorEndAt;
+    const postEnd = endAt + POST_DELAY_MS;
+
+    let sec = 0;
+    if (now < spinStartAt){
+      // countdown to spin start
+      sec = Math.max(0, Math.ceil((spinStartAt - now) / 1000));
+    } else if (now >= spinStartAt && now <= endAt){
+      // show remaining seconds until spin end (still countdown)
+      sec = Math.max(0, Math.ceil((endAt - now) / 1000));
+    } else if (now > endAt && now < postEnd){
+      // 15 sec delay after end
+      sec = Math.max(0, Math.ceil((postEnd - now) / 1000));
+    } else {
+      // after post delay, show countdown to next spinStartAt based on current S (will update from server)
+      sec = Math.max(0, Math.ceil((anchorSpinStartAt - now) / 1000));
     }
 
-    // ✅ 15 секунд “пауза” перед стартом нового раунда UI
-    postSpinUntil = serverTimeNow() + POST_SPIN_DELAY_SEC*1000;
+    hudMain.textContent = String(sec);
+    hudSub.textContent = ""; // никаких надписей
   }
 
+  // Determine renderAngle based on phase (purely time-based)
+  function computeAngleAt(now){
+    if (!S) return renderAngle;
+
+    const t0 = anchorSpinStartAt;
+    const t1 = anchorEndAt;
+
+    if (now < t0) return anchorStartAngle;
+    if (now >= t1) return anchorTargetAngle;
+
+    const t = (now - t0) / (t1 - t0);
+    const k = easeOutQuint(Math.min(1, Math.max(0, t)));
+    return anchorStartAngle + (anchorTargetAngle - anchorStartAngle) * k;
+  }
+
+  // Confetti once per round end (client-side, safe)
+  let celebratedRoundId = null;
+  function maybeCelebrate(now){
+    if (!S) return;
+    if (now < anchorEndAt) return;
+    if (celebratedRoundId === anchorRoundId) return;
+    celebratedRoundId = anchorRoundId;
+
+    const sec = sectors[anchorWinner];
+    if (sec?.icon === "fish") celebrateFish(sec.kind);
+  }
+
+  // Render loop (always running)
+  function raf(now){
+    const serverNow = serverTimeNow();
+    renderAngle = computeAngleAt(serverNow);
+
+    const hi = indexAtPointer(renderAngle);
+    drawWheel(renderAngle, hi);
+
+    updatePointerFlex(now);
+    setHUD();
+    maybeCelebrate(serverNow);
+
+    requestAnimationFrame(raf);
+  }
+
+  // state poll (does NOT restart spin; only updates anchors)
   async function syncLoop(){
     try{
-      const state = await fetchState();
-      timeOffset = state.serverNow - Date.now();
-
-      // ✅ пока крутится — не трогаем state, чтобы не было “врыва” нового раунда
-      if (spinning) return;
-
-      // ✅ если идёт 15с задержка — показываем её, но schedule на следующий round уже можно готовить
-      const serverLast = (state.history && state.history.length)
-        ? Math.max(...state.history.map(x => x.roundId))
-        : null;
-
-      if (serverLast !== null && serverLast !== lastServerHistoryRoundId) {
-        applyServerHistory(state);
-      }
-
-      setHUDCountdown(state.round.endAt);
-
-      // schedule only if we are NOT in post-spin delay
-      if (serverTimeNow() >= postSpinUntil){
-        if (scheduledForRoundId !== state.round.roundId){
-          scheduleSpinAtEnd(state.round.endAt, state.round.winnerIndex, state.round.roundId);
-        }
-      }
+      const st = await fetchState();
+      applyState(st);
     }catch{}
   }
 
-  /* init */
+  /* init UI */
   (async function initAll(){
     await syncWalletUI();
     if (getWalletRawLS()) await bindWalletOnServer();
     await refreshBalance();
 
-    drawWheel(null);
+    drawWheel(renderAngle, null);
     renderHistory();
     updateUndoState();
 
-    syncLoop();
-    setInterval(syncLoop, 500);
+    await syncLoop();
+    setInterval(syncLoop, 700);
     setInterval(refreshBalance, 5000);
+
+    requestAnimationFrame(raf);
   })();
 </script>
 </body>
