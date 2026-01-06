@@ -80,10 +80,7 @@
       min-width:120px; text-transform:uppercase;
       text-shadow: 0 6px 18px rgba(0,0,0,.12);
     }
-    .hudText small{
-      display:block; font-weight:900; opacity:.0; /* скрыто */
-      letter-spacing:.2px; margin-top:3px; font-size:11px;
-    }
+    .hudText small{ display:block; opacity:0; height:0; }
 
     /* top right */
     .hudRight{
@@ -134,7 +131,7 @@
     }
     canvas{ width:100%; height:100%; border-radius:50%; display:block; }
 
-    /* ✅ pointer: ONLY RED ROD */
+    /* pointer: ONLY RED ROD */
     .pointer{
       position:absolute;
       left:50%;
@@ -1007,6 +1004,13 @@
     const t = Math.PI*2;
     return ((a%t)+t)%t;
   }
+  function wrapNear(ref, value){
+    // возвращаем эквивалент value (±2π*k), который ближе всего к ref (без скачка)
+    const t = Math.PI*2;
+    let v = value;
+    v += Math.round((ref - v)/t)*t;
+    return v;
+  }
 
   const pointerWorld = -Math.PI/2;
 
@@ -1082,7 +1086,6 @@
     ctx.restore();
   }
 
-  // ✅ darker separators (dots)
   function drawOrnaments(angle){
     ctx.save();
     ctx.translate(cx,cy);
@@ -1095,7 +1098,7 @@
       const y = Math.sin(a) * r;
 
       ctx.beginPath();
-      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      ctx.fillStyle = "rgba(0,0,0,0.30)";
       ctx.arc(x,y, 3.2, 0, Math.PI*2);
       ctx.fill();
 
@@ -1201,9 +1204,29 @@
     }
   }
 
-  /* Server state + time sync */
+  /* ---- SERVER TIME (NO JITTER) ---- */
+
+  // плавный оффсет (чтобы не было “перемотки”)
   let timeOffset = 0;
-  function serverTimeNow(){ return Date.now() + timeOffset; }
+  const OFFSET_SMOOTH = 0.12;
+
+  // монотонное “серверное время” на клиенте (никогда не идет назад)
+  let monoServerNow = Date.now();
+  let lastLocalNow = Date.now();
+
+  function updateMonotonicServerTime(){
+    const local = Date.now();
+    const dt = Math.max(0, local - lastLocalNow);
+    lastLocalNow = local;
+    monoServerNow += dt; // просто двигаем вперед
+    return monoServerNow;
+  }
+
+  function serverTimeNow(){
+    // монотонное время + плавный оффсет
+    const base = updateMonotonicServerTime();
+    return base + timeOffset;
+  }
 
   async function fetchState(){
     const r = await fetch("/api/state", { cache:"no-store" });
@@ -1211,15 +1234,11 @@
     return await r.json();
   }
 
-  /* ========= SYNCHRONIZED PHASE (fixed logic) ========= */
+  /* ========= SYNCHRONIZED PHASE ========= */
 
-  // Spin duration fixed (visual), but HUD doesn't show it.
   const SPIN_MS = 8600;
-  const SPIN_TURNS = 22;
-
-  // ✅ The "between rounds" countdown starts AFTER spin finished + result is in history.
-  // That means: next spin should start at (endAt + 15000), not immediately.
   const POST_DELAY_MS = 15000;
+  const SPIN_TURNS = 22;
 
   function easeOutQuint(t){ return 1 - Math.pow(1-t, 5); }
 
@@ -1235,21 +1254,20 @@
     return desiredMod + k * (Math.PI*2);
   }
 
-  // current angle
+  // angles
   let renderAngle = 0;
-  // smoothing to remove micro-jitters from timeOffset updates
-  const SMOOTH = 0.18;
+  const ANGLE_SMOOTH = 0.16; // плавность отрисовки (без рывков)
 
-  // latest server state
+  // state
   let S = null;
 
-  // derived anchors
+  // anchors
   let anchorRoundId = null;
   let anchorStartAngle = 0;
   let anchorTargetAngle = 0;
   let anchorWinner = 0;
 
-  // IMPORTANT: next spin start = endAt + POST_DELAY_MS
+  // times
   let spinStartAt = 0;
   let endAt = 0;
   let nextSpinAt = 0;
@@ -1285,80 +1303,84 @@
 
   function applyState(state){
     S = state;
-    timeOffset = (state.serverNow || Date.now()) - Date.now();
 
-    const curRoundId = state?.round?.roundId;
+    // 1) плавно обновляем timeOffset
+    const targetOffset = (state.serverNow || Date.now()) - Date.now();
+    timeOffset = timeOffset + (targetOffset - timeOffset) * OFFSET_SMOOTH;
+
+    // 2) история: показываем state.history как есть
     const listAll = (state.history || []).slice().sort((a,b)=>a.roundId-b.roundId);
-    const finished = (typeof curRoundId === "number") ? listAll.filter(x => x.roundId < curRoundId) : listAll;
-
-    // server-only history
     history.length = 0;
-    for (const item of finished.slice(-HISTORY_MAX)) history.push(item.winnerIndex);
+    for (const item of listAll.slice(-HISTORY_MAX)) history.push(item.winnerIndex);
     renderHistory();
 
+    // 3) времена раунда — берем прямо из API
     const rid = state.round.roundId;
     const winner = state.round.winnerIndex;
 
-    // backend endAt is spin end
+    // важно: api/state.js у тебя теперь startAt = начало спина
+    spinStartAt = state.round.startAt;
     endAt = state.round.endAt;
     nextSpinAt = endAt + POST_DELAY_MS;
-    // spin starts 8.6s before endAt
-    spinStartAt = endAt - SPIN_MS;
 
-    // recompute anchors only when round changes (or winner changed)
+    // 4) смена раунда: подхват без скачка
     if (anchorRoundId !== rid || anchorWinner !== winner || anchorRoundId === null){
       anchorRoundId = rid;
       anchorWinner = winner;
 
-      const lastFinished = finished.length ? finished[finished.length-1] : null;
-      const prevWinnerIdx = lastFinished ? lastFinished.winnerIndex : null;
-
-      // start angle should be exact "final" of previous winner so everyone matches
-      if (typeof prevWinnerIdx === "number"){
-        anchorStartAngle = desiredAngleForWinner(prevWinnerIdx);
-      } else {
-        // if no history, keep current
-        anchorStartAngle = renderAngle;
+      // стартовая позиция = “результат прошлого раунда”
+      // берем последний элемент истории, который относится к прошлому завершенному раунду:
+      // (после конца спина текущего раунда — он уже добавлен в history, и это ОК)
+      let prevWinnerIdx = null;
+      if (listAll.length >= 1){
+        const last = listAll[listAll.length - 1];
+        // если последний элемент — это не прошлый раунд, а текущий уже завершенный — тоже нормально:
+        // старт следующего раунда должен быть именно на прошлом результате.
+        prevWinnerIdx = last.winnerIndex;
       }
 
-      anchorTargetAngle = buildTargetAngleFromStart(anchorStartAngle, winner);
+      const desiredStart = (typeof prevWinnerIdx === "number")
+        ? desiredAngleForWinner(prevWinnerIdx)
+        : renderAngle;
+
+      // подбираем эквивалент (±2π) ближе к текущему renderAngle
+      anchorStartAngle = wrapNear(renderAngle, desiredStart);
+
+      const rawTarget = buildTargetAngleFromStart(anchorStartAngle, winner);
+      // и target тоже подбираем непрерывно (чтобы не было скачка)
+      anchorTargetAngle = wrapNear(anchorStartAngle - (SPIN_TURNS * Math.PI*2), rawTarget);
     }
   }
 
   // HUD: during spin = hidden, after spin = 15..0
   const hudMain = document.getElementById("hudMain");
-  const hudSub  = document.getElementById("hudSub");
 
   function setHUD(){
-    if (!S){ hudMain.textContent = "0"; hudSub.textContent=""; return; }
+    if (!S){ hudMain.textContent = "0"; return; }
 
     const now = serverTimeNow();
 
     if (now >= spinStartAt && now <= endAt){
-      // ✅ during spin show nothing
-      hudMain.textContent = "";
+      hudMain.textContent = ""; // во время спина ничего
       return;
     }
 
     if (now > endAt && now < nextSpinAt){
-      // ✅ post delay 15s (start exactly after end)
       const left = Math.max(0, Math.ceil((nextSpinAt - now)/1000));
       hudMain.textContent = String(left);
       return;
     }
 
-    // before spin: show countdown to spin start (but NOT showing 8 sec; it’s just pre-spin)
+    // до спина показываем сколько осталось до старта (но не показываем “8 сек спина”)
     if (now < spinStartAt){
       const left = Math.max(0, Math.ceil((spinStartAt - now)/1000));
       hudMain.textContent = String(left);
       return;
     }
 
-    // after delay if state still same — keep 0 until next state arrives
     hudMain.textContent = "0";
   }
 
-  // compute "true angle" from time
   function computeTrueAngle(now){
     if (!S) return renderAngle;
 
@@ -1382,13 +1404,12 @@
     if (sec?.icon === "fish") celebrateFish(sec.kind);
   }
 
-  // Render loop (smoothed)
   function raf(now){
     const sn = serverTimeNow();
     const trueAngle = computeTrueAngle(sn);
 
-    // ✅ smooth to remove timeOffset jitter
-    renderAngle = renderAngle + (trueAngle - renderAngle) * SMOOTH;
+    // сглаживаем именно угол (это убирает микро-рывки)
+    renderAngle = renderAngle + (trueAngle - renderAngle) * ANGLE_SMOOTH;
 
     const hi = indexAtPointer(renderAngle);
     drawWheel(renderAngle, hi);
