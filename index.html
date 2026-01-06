@@ -80,7 +80,6 @@
       min-width:120px; text-transform:uppercase;
       text-shadow: 0 6px 18px rgba(0,0,0,.12);
     }
-    .hudText small{ display:block; opacity:0; height:0; }
 
     /* top right */
     .hudRight{
@@ -131,7 +130,7 @@
     }
     canvas{ width:100%; height:100%; border-radius:50%; display:block; }
 
-    /* pointer: ONLY RED ROD */
+    /* pointer: red rod */
     .pointer{
       position:absolute;
       left:50%;
@@ -404,16 +403,12 @@
     <div class="cube"></div>
     <div class="hudText">
       <span id="hudMain">0</span>
-      <small id="hudSub"></small>
     </div>
   </div>
 
   <div class="wheelWrap">
     <canvas id="wheel" width="900" height="900"></canvas>
-
-    <div class="pointer" aria-hidden="true">
-      <div class="pointerRod" id="pointerRod"></div>
-    </div>
+    <div class="pointer" aria-hidden="true"><div class="pointerRod" id="pointerRod"></div></div>
   </div>
 
   <div class="bottomUI">
@@ -421,24 +416,14 @@
 
     <div class="bonusPanel">
       <div class="bonusTop">
-        <div class="btn small c-leaf1 bettable" data-target="leaf1">
-          <span class="btnIcon">🍃</span> Leaf 1
-        </div>
-        <div class="btn small c-leaf2 bettable" data-target="leaf2">
-          <span class="btnIcon">🍃</span> Leaf 2
-        </div>
+        <div class="btn small c-leaf1 bettable" data-target="leaf1"><span class="btnIcon">🍃</span> Leaf 1</div>
+        <div class="btn small c-leaf2 bettable" data-target="leaf2"><span class="btnIcon">🍃</span> Leaf 2</div>
       </div>
 
       <div class="bonusBottom">
-        <div class="btn big c-blue bettable" data-target="lilblues">
-          <span class="btnIcon">🐟</span> LIL BLUES Bonus
-        </div>
-        <div class="btn big c-orange bettable" data-target="bigoranges">
-          <span class="btnIcon">🐟</span> BIG ORANGES Bonus
-        </div>
-        <div class="btn big c-red bettable" data-target="hugered">
-          <span class="btnIcon">🐟</span> HUGE REDS Bonus
-        </div>
+        <div class="btn big c-blue bettable" data-target="lilblues"><span class="btnIcon">🐟</span> LIL BLUES Bonus</div>
+        <div class="btn big c-orange bettable" data-target="bigoranges"><span class="btnIcon">🐟</span> BIG ORANGES Bonus</div>
+        <div class="btn big c-red bettable" data-target="hugered"><span class="btnIcon">🐟</span> HUGE REDS Bonus</div>
       </div>
 
       <div class="betRow">
@@ -467,33 +452,15 @@
   <div class="modalOverlay" id="tonModal">
     <div class="sheet">
       <div class="sheetHeader">
-        <div class="sheetTitle">
-          <img src="ton.png" alt="TON">
-          TON
-        </div>
+        <div class="sheetTitle"><img src="ton.png" alt="TON">TON</div>
         <button class="closeBtn" id="tonClose">✕</button>
       </div>
 
       <div class="sheetBtns">
-        <div class="sheetAction" id="actionBind">
-          <span>Привязать кошелек</span>
-          <small id="walletStatus">Not connected</small>
-        </div>
-
-        <div class="sheetAction" id="actionDisconnect">
-          <span>Отвязать кошелек</span>
-          <small>Disconnect</small>
-        </div>
-
-        <div class="sheetAction" id="actionDeposit">
-          <span>Депозит</span>
-          <small>Enter amount</small>
-        </div>
-
-        <div class="sheetAction" id="actionWithdraw">
-          <span>Вывод</span>
-          <small>Later</small>
-        </div>
+        <div class="sheetAction" id="actionBind"><span>Привязать кошелек</span><small id="walletStatus">Not connected</small></div>
+        <div class="sheetAction" id="actionDisconnect"><span>Отвязать кошелек</span><small>Disconnect</small></div>
+        <div class="sheetAction" id="actionDeposit"><span>Депозит</span><small>Enter amount</small></div>
+        <div class="sheetAction" id="actionWithdraw"><span>Вывод</span><small>Later</small></div>
       </div>
     </div>
   </div>
@@ -521,11 +488,8 @@
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   function showPopup(title, message){
-    if (tg?.showPopup){
-      tg.showPopup({ title, message, buttons:[{type:"ok"}] });
-    } else {
-      alert(`${title}\n\n${message}`);
-    }
+    if (tg?.showPopup) tg.showPopup({ title, message, buttons:[{type:"ok"}] });
+    else alert(`${title}\n\n${message}`);
   }
 
   /* snow */
@@ -559,16 +523,13 @@
       p.style.width = (6 + Math.random()*10) + "px";
       p.style.height = (8 + Math.random()*14) + "px";
       p.style.background = colors[(Math.random()*colors.length)|0];
-
       const dx = (Math.random() - 0.5) * Math.min(420, W*0.8);
       const rot = (360 + Math.random()*1080) * (Math.random() < 0.5 ? -1 : 1);
       const dur = 1200 + Math.random()*1500;
-
       p.style.setProperty("--dx", dx + "px");
       p.style.setProperty("--rot", rot + "deg");
       p.style.animationDuration = dur + "ms";
       p.style.animationDelay = (Math.random()*120) + "ms";
-
       confettiLayer.appendChild(p);
       setTimeout(() => p.remove(), dur + 250);
     }
@@ -580,7 +541,7 @@
     else burstConfetti(["#ffffff","#dbeafe","#ffedd5","#ffe4e6"]);
   }
 
-  /* @ton/core */
+  /* ton core helpers */
   let __tonCore = null;
   async function tonCore(){
     if (!__tonCore) __tonCore = await import("https://esm.sh/@ton/core@0.58.0");
@@ -596,7 +557,7 @@
     const a = String(addr || "").trim();
     if (!a) return null;
     const { Address } = await tonCore();
-    return Address.parse(a).toString({ urlSafe:true, bounceable:false, testOnly:false });
+    return Address.parse(a).toString({ urlSafe: true, bounceable: false, testOnly: false });
   }
   function bytesToBase64(bytes){
     let bin = "";
@@ -606,7 +567,7 @@
   async function commentToBocBase64(comment){
     const { beginCell } = await tonCore();
     const cell = beginCell().storeUint(0, 32).storeStringTail(String(comment || "")).endCell();
-    const boc = cell.toBoc({ idx:false });
+    const boc = cell.toBoc({ idx: false });
     return bytesToBase64(boc);
   }
   function shortAddr(a){ return a ? (a.slice(0,6) + "..." + a.slice(-6)) : ""; }
@@ -641,12 +602,9 @@
   /* TonConnect init */
   (function initTonConnect(){
     try{
-      if (!window.TON_CONNECT_UI || !window.TON_CONNECT_UI.TonConnectUI) {
-        window.__tonUI = null;
-        window.__wallet = null;
-        return;
-      }
-      const TonConnectUI = window.TON_CONNECT_UI.TonConnectUI;
+      const TonConnectUI = window.TON_CONNECT_UI?.TonConnectUI;
+      if (!TonConnectUI) { window.__tonUI = null; window.__wallet = null; return; }
+
       const tonUI = new TonConnectUI({
         manifestUrl: location.origin + "/tonconnect-manifest.json",
         actionsConfiguration: { twaReturnUrl: "https://t.me/ICE_FISHING_ICE_BOT?startapp=1" }
@@ -678,7 +636,7 @@
     const initData = tg?.initData || "";
     if (!initData) return;
     try{
-      await fetch("/api/bind_wallet", {
+      await fetch(`/api/bind_wallet?t=${Date.now()}`, {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ initData, walletAddress: raw })
@@ -731,7 +689,7 @@
   async function refreshBalance(){
     const raw = await getAddressRawForApi();
     if (!raw){ setBalanceTonUI(0); return 0; }
-    const r = await fetch(`/api/balance?address=${encodeURIComponent(raw)}`, { cache:"no-store" });
+    const r = await fetch(`/api/balance?address=${encodeURIComponent(raw)}&t=${Date.now()}`, { cache:"no-store" });
     if (!r.ok) return balanceTonCache;
     const j = await r.json().catch(()=>({}));
     let ton = 0;
@@ -772,44 +730,25 @@
     depositModal.classList.add("open");
   });
 
-  document.getElementById("actionWithdraw").addEventListener("click", () => {
-    showPopup("TON", "Вывод добавим позже.");
-  });
+  document.getElementById("actionWithdraw").addEventListener("click", () => showPopup("TON", "Вывод добавим позже."));
 
   async function confirmDepositTry(intentId, addressRaw){
-    try{
-      const r = await fetch("/api/confirm_deposit", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ intentId, address: addressRaw })
-      });
-      const j = await r.json().catch(()=>({}));
-      if (j && j.error === "method") throw new Error("method_get_needed");
-      return { ok: r.ok, json: j };
-    }catch{
-      const url = `/api/confirm_deposit?intentId=${encodeURIComponent(intentId)}&address=${encodeURIComponent(addressRaw)}`;
-      const r2 = await fetch(url, { cache:"no-store" });
-      const j2 = await r2.json().catch(()=>({}));
-      return { ok: r2.ok, json: j2 };
-    }
+    const url = `/api/confirm_deposit?intentId=${encodeURIComponent(intentId)}&address=${encodeURIComponent(addressRaw)}&t=${Date.now()}`;
+    const r = await fetch(url, { cache:"no-store" });
+    const j = await r.json().catch(()=>({}));
+    return { ok: r.ok, json: j };
   }
 
-  // ✅ silent resume: депозит не потеряется при обновлении/закрытии
   async function resumeDepositsSilently(){
     const raw = await getAddressRawForApi();
     if (!raw) return;
-    try{
-      await fetch(`/api/deposit_resume?address=${encodeURIComponent(raw)}`, { cache:"no-store" });
-    }catch{}
+    try{ await fetch(`/api/deposit_resume?address=${encodeURIComponent(raw)}&t=${Date.now()}`, { cache:"no-store" }); }catch{}
   }
 
   async function waitAndCreditSilent(intentId){
     const raw = await getAddressRawForApi();
     if (!raw) return;
-
-    // сохраняем intent, чтобы после обновления можно было догнать
     try{ localStorage.setItem("lastDepositIntentId", String(intentId)); }catch{}
-
     for (let i=0;i<80;i++){
       const { ok, json } = await confirmDepositTry(intentId, raw);
       if (ok && json?.status === "credited"){
@@ -821,7 +760,6 @@
       }
       await sleep(1500);
     }
-    // не показываем лишнее — просто попросим зайти позже
   }
 
   document.getElementById("depositConfirm").addEventListener("click", async () => {
@@ -833,8 +771,7 @@
     if (amountTon < 0.1){ showPopup("Ошибка", "Минимум 0.1 TON"); return; }
     if (!window.__tonUI?.sendTransaction){ showPopup("TON", "TonConnect UI не готов."); return; }
 
-    // ✅ передаем address чтобы intent попал в dep:pending:<wallet>
-    const r = await fetch("/api/deposit_intent", {
+    const r = await fetch(`/api/deposit_intent?t=${Date.now()}`, {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ amountTon, address: raw })
@@ -853,9 +790,6 @@
       });
 
       depositModal.classList.remove("open");
-
-      // ✅ даже если юзер обновится — pending set останется на сервере
-      // здесь просто быстро пытаемся подтвердить
       setTimeout(() => waitAndCreditSilent(intent.intentId), 8000);
     }catch(e){
       console.log(e);
@@ -868,10 +802,7 @@
   const betSelect = document.getElementById("betSelect");
   const betMenu = document.getElementById("betMenu");
   const betValue = document.getElementById("betValue");
-  const undoBtn = document.getElementById("undoBtn");
-
-  // Undo отключен (чтобы не делать дыру без server undo)
-  undoBtn.addEventListener("click", (e) => { e.stopPropagation(); });
+  document.getElementById("undoBtn").addEventListener("click", (e)=>{ e.stopPropagation(); });
 
   const totals = new Map(); // target -> ton
   function fmt(x){
@@ -905,7 +836,6 @@
       btn.appendChild(badge);
     }
   }
-
   function clearAllBetsUI(){
     totals.clear();
     document.querySelectorAll(".bettable").forEach(btn => {
@@ -914,7 +844,6 @@
     });
   }
 
-  // ✅ Server bet place
   async function addBet(target, amountTon){
     if (!getWalletRawLS()){ showPopup("Ставки", "Сначала привяжи кошелёк."); return; }
     if (!S?.round?.roundId && S?.round?.roundId !== 0){ showPopup("Ставки", "Нет данных раунда."); return; }
@@ -928,7 +857,7 @@
       return;
     }
 
-    const r = await fetch("/api/bet_place", {
+    const r = await fetch(`/api/bet_place?t=${Date.now()}`, {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ address: raw, roundId, target, amountNano })
@@ -953,12 +882,11 @@
     btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
 
-  // ✅ settlement (после конца спина + при заходе/обновлении)
   async function settleBetsIfNeeded(){
     const raw = await getAddressRawForApi();
     if (!raw) return;
     try{
-      const r = await fetch("/api/bet_settle", {
+      const r = await fetch(`/api/bet_settle?t=${Date.now()}`, {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ address: raw })
@@ -966,19 +894,12 @@
       const j = await r.json().catch(()=>({}));
       if (!r.ok) return;
 
-      if (Array.isArray(j.settled) && j.settled.length){
-        // ставки этого/прошлых раундов закрыли — чистим UI
-        clearAllBetsUI();
-      }
-
-      if (j.creditedTonTotal && j.creditedTonTotal > 0){
-        await refreshBalance();
-      }
+      if (Array.isArray(j.settled) && j.settled.length) clearAllBetsUI();
+      if (j.creditedTonTotal && j.creditedTonTotal > 0) await refreshBalance();
     }catch{}
   }
 
   /* ========= WHEEL SYNC ========= */
-
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -1024,7 +945,6 @@
     toggle++;
   }
 
-  /* Canvas */
   const canvas = document.getElementById("wheel");
   const ctx = canvas.getContext("2d");
   const W = canvas.width, H = canvas.height;
@@ -1045,7 +965,6 @@
   }
 
   const pointerWorld = -Math.PI/2;
-
   function indexAtPointer(angle){
     const rel = normalize(pointerWorld - angle - startOffset);
     return Math.floor(rel / step);
@@ -1130,7 +1049,7 @@
       const y = Math.sin(a) * r;
 
       ctx.beginPath();
-      ctx.fillStyle = "rgba(0,0,0,0.30)";
+      ctx.fillStyle = "rgba(0,0,0,0.32)";
       ctx.arc(x,y, 3.2, 0, Math.PI*2);
       ctx.fill();
 
@@ -1145,7 +1064,6 @@
   function drawWheel(angle, highlightIdx=null){
     ctx.clearRect(0,0,W,H);
 
-    // ice base
     ctx.save();
     const ice = ctx.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
     ice.addColorStop(0, "rgba(255,255,255,0.96)");
@@ -1157,7 +1075,6 @@
     ctx.fill();
     ctx.restore();
 
-    // rim
     ctx.save();
     const rimGrad = ctx.createRadialGradient(cx,cy,outerR*0.92, cx,cy,outerR*1.06);
     rimGrad.addColorStop(0, "rgba(18,27,47,0.95)");
@@ -1169,7 +1086,6 @@
     ctx.stroke();
     ctx.restore();
 
-    // sectors
     ctx.save();
     ctx.translate(cx,cy);
     ctx.rotate(angle);
@@ -1184,7 +1100,6 @@
       ctx.moveTo(0,0);
       ctx.arc(0,0, outerR*0.90, a0, a1);
       ctx.closePath();
-
       ctx.fillStyle = sec.fill;
       ctx.fill();
 
@@ -1220,7 +1135,7 @@
     drawOrnaments(angle);
   }
 
-  /* History (server only) */
+  /* History from server only */
   const historyBar = document.getElementById("historyBar");
   const history = [];
   const HISTORY_MAX = 18;
@@ -1236,21 +1151,18 @@
     }
   }
 
-  /* ---- SERVER TIME (NO WOBBLE ON FIRST JOIN) ---- */
-
+  /* ---- SERVER TIME (NO WOBBLE + SANITY) ---- */
   let timeOffset = 0;
   let syncedOnce = false;
-
   let baseServerNow = Date.now();
   let baseLocalNow = Date.now();
-
   let lastServerNow = 0;
+
   const OFFSET_SLEW = 0.22;
 
   function serverTimeNow(){
     const local = Date.now();
     let est = baseServerNow + (local - baseLocalNow) + timeOffset;
-
     if (syncedOnce){
       if (est < lastServerNow) est = lastServerNow;
       lastServerNow = est;
@@ -1259,17 +1171,15 @@
   }
 
   async function fetchState(){
-    const r = await fetch("/api/state", { cache:"no-store" });
+    const r = await fetch(`/api/state?t=${Date.now()}`, { cache:"no-store" });
     if (!r.ok) throw new Error("api_state_error");
     return await r.json();
   }
 
   /* ========= SYNCHRONIZED PHASE ========= */
-
-  // должно совпадать с state.js
+  // ОДИН ИСТОЧНИК ПРАВДЫ: state.round.startAt/endAt и state.round.winnerIndex
   const SPIN_MS = 8600;
   const POST_DELAY_MS = 15000;
-
   const SPIN_TURNS = 22;
 
   function easeOutQuint(t){ return 1 - Math.pow(1-t, 5); }
@@ -1300,7 +1210,8 @@
   let endAt = 0;
   let nextSpinAt = 0;
 
-  // pointer flex
+  const hudMain = document.getElementById("hudMain");
+
   const pointerRod = document.getElementById("pointerRod");
   let lastRAFTime = 0;
   let lastRAFAngle = 0;
@@ -1332,7 +1243,7 @@
   function applyState(state){
     S = state;
 
-    // ✅ time sync (first time hard, then slew)
+    // time sync
     const targetOffset = (state.serverNow || Date.now()) - Date.now();
 
     if (!syncedOnce){
@@ -1345,27 +1256,46 @@
       timeOffset = timeOffset + (targetOffset - timeOffset) * OFFSET_SLEW;
     }
 
-    // history from server
+    // sanity: если сервер вернул кривые значения — не ломаем анимацию
+    const srvSpin = Number(state.spinMs || SPIN_MS);
+    const srvDelay = Number(state.postDelayMs || POST_DELAY_MS);
+
+    // история
     const listAll = (state.history || []).slice().sort((a,b)=>a.roundId-b.roundId);
     history.length = 0;
     for (const item of listAll.slice(-HISTORY_MAX)) history.push(item.winnerIndex);
     renderHistory();
 
-    const rid = state.round.roundId;
-    const winner = state.round.winnerIndex;
+    const rid = Number(state.round?.roundId);
+    const winner = Number(state.round?.winnerIndex);
 
-    spinStartAt = state.round.startAt;
-    endAt = state.round.endAt;
-    nextSpinAt = endAt + POST_DELAY_MS;
+    const sStart = Number(state.round?.startAt);
+    const sEnd = Number(state.round?.endAt);
+
+    if (!Number.isFinite(rid) || !Number.isFinite(winner) || !Number.isFinite(sStart) || !Number.isFinite(sEnd)){
+      return;
+    }
+
+    // если сервер вдруг вернул “endAt далеко”, мы ограничим по разумному диапазону
+    const maxSpin = Math.max(4000, Math.min(12000, srvSpin));
+    const maxDelay = Math.max(5000, Math.min(60000, srvDelay));
+
+    spinStartAt = sStart;
+    endAt = sEnd;
+
+    // если endAt слишком далеко от startAt, пересчитаем
+    if ((endAt - spinStartAt) < 1000 || (endAt - spinStartAt) > 30000){
+      endAt = spinStartAt + maxSpin;
+    }
+
+    nextSpinAt = endAt + maxDelay;
 
     if (anchorRoundId !== rid || anchorWinner !== winner || anchorRoundId === null){
       anchorRoundId = rid;
       anchorWinner = winner;
 
       let prevWinnerIdx = null;
-      if (listAll.length >= 1){
-        prevWinnerIdx = listAll[listAll.length - 1].winnerIndex;
-      }
+      if (listAll.length >= 1) prevWinnerIdx = listAll[listAll.length - 1].winnerIndex;
 
       const desiredStart = (typeof prevWinnerIdx === "number")
         ? desiredAngleForWinner(prevWinnerIdx)
@@ -1377,8 +1307,6 @@
       anchorTargetAngle = wrapNear(anchorStartAngle - (SPIN_TURNS * Math.PI*2), rawTarget);
     }
   }
-
-  const hudMain = document.getElementById("hudMain");
 
   function setHUD(){
     if (!S){ hudMain.textContent = "0"; return; }
@@ -1407,7 +1335,6 @@
 
   function computeTrueAngle(now){
     if (!S) return renderAngle;
-
     if (now < spinStartAt) return anchorStartAngle;
     if (now >= endAt) return anchorTargetAngle;
 
@@ -1416,7 +1343,6 @@
     return anchorStartAngle + (anchorTargetAngle - anchorStartAngle) * k;
   }
 
-  // celebration + settlement trigger once per round end
   let celebratedRoundId = null;
   let settledRoundId = null;
 
@@ -1431,14 +1357,12 @@
     if (!S) return;
     if (now < endAt) return;
 
-    // confetti once
     if (celebratedRoundId !== anchorRoundId){
       celebratedRoundId = anchorRoundId;
       const kind = winnerKindFromIndex(anchorWinner);
       if (kind !== "leaf") celebrateFish(kind);
     }
 
-    // settle once
     if (settledRoundId !== anchorRoundId){
       settledRoundId = anchorRoundId;
       setTimeout(settleBetsIfNeeded, 200);
@@ -1449,7 +1373,6 @@
   function raf(now){
     const sn = serverTimeNow();
     const trueAngle = computeTrueAngle(sn);
-
     renderAngle = renderAngle + (trueAngle - renderAngle) * ANGLE_SMOOTH;
 
     const hi = indexAtPointer(renderAngle);
@@ -1474,15 +1397,14 @@
     if (getWalletRawLS()) await bindWalletOnServer();
     await refreshBalance();
 
-    // ✅ депозит не потеряется
     await resumeDepositsSilently();
+
     const lastIntent = (localStorage.getItem("lastDepositIntentId") || "").trim();
     if (lastIntent && getWalletRawLS()){
       const raw = await getAddressRawForApi();
       if (raw) confirmDepositTry(lastIntent, raw).catch(()=>{});
     }
 
-    // ✅ если юзер обновился — ставки/выигрыш догонятся
     await settleBetsIfNeeded();
 
     drawWheel(renderAngle, null);
@@ -1490,16 +1412,10 @@
 
     await syncLoop();
 
-    // state polling (не слишком часто для нагрузки)
+    // polling
     setInterval(syncLoop, 1100);
-
-    // баланс
     setInterval(refreshBalance, 5000);
-
-    // resume deposits
     setInterval(resumeDepositsSilently, 12000);
-
-    // settle safety net
     setInterval(settleBetsIfNeeded, 6500);
 
     requestAnimationFrame(raf);
