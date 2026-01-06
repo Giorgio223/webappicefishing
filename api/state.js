@@ -1,25 +1,27 @@
 import { Redis } from "@upstash/redis";
-import crypto from "crypto";
+import { createHmac } from "node:crypto";
+
+export const config = { runtime: "nodejs" };
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// ✅ тайминги
-const SPIN_MS = 8600;          // длительность вращения
-const POST_DELAY_MS = 15000;   // пауза после остановки
+// ДОЛЖНО совпадать с index.html
+const SPIN_MS = 8600;
+const POST_DELAY_MS = 15000;
 const ROUND_MS = SPIN_MS + POST_DELAY_MS;
 
 const N = 53;
 const HISTORY_MAX = 18;
 
-// если вдруг история улетела далеко (защита)
+// если что-то совсем сломалось по времени — пересобираем историю
 const MAX_ROUND_DRIFT = 60 * 60;
 
 function winnerForRound(roundId) {
   const seed = process.env.WHEEL_SEED || "dev-seed";
-  const h = crypto.createHmac("sha256", seed).update(String(roundId)).digest();
+  const h = createHmac("sha256", seed).update(String(roundId)).digest();
   const num = (h[0] << 24) | (h[1] << 16) | (h[2] << 8) | h[3];
   return (num >>> 0) % N;
 }
@@ -28,17 +30,12 @@ async function rebuildHistory(lastCompletedRoundId) {
   const from = Math.max(0, lastCompletedRoundId - (HISTORY_MAX - 1));
   await redis.del("wheel:history");
   for (let r = from; r <= lastCompletedRoundId; r++) {
-    await redis.rpush(
-      "wheel:history",
-      JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) })
-    );
+    await redis.rpush("wheel:history", JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) }));
   }
   await redis.set("wheel:lastRoundId", lastCompletedRoundId);
 }
 
 async function ensureHistoryUpTo(lastCompletedRoundId) {
-  if (lastCompletedRoundId < 0) return;
-
   const lockKey = `wheel:lock:${lastCompletedRoundId}`;
   const got = await redis.set(lockKey, "1", { nx: true, px: 5000 });
   if (!got) return;
@@ -59,10 +56,7 @@ async function ensureHistoryUpTo(lastCompletedRoundId) {
 
   if (last < lastCompletedRoundId) {
     for (let r = last + 1; r <= lastCompletedRoundId; r++) {
-      await redis.rpush(
-        "wheel:history",
-        JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) })
-      );
+      await redis.rpush("wheel:history", JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) }));
     }
     await redis.ltrim("wheel:history", -HISTORY_MAX, -1);
     await redis.set("wheel:lastRoundId", lastCompletedRoundId);
@@ -78,21 +72,16 @@ export default async function handler(req, res) {
 
     const now = Date.now();
 
-    // roundId идёт по циклу SPIN+PAUSE
+    // roundId — по полному циклу (spin + delay)
     const roundId = Math.floor(now / ROUND_MS);
-    const roundStartAt = roundId * ROUND_MS;
+    const startAt = roundId * ROUND_MS;     // старт раунда = старт спина
+    const endAt = startAt + SPIN_MS;        // конец спина
+    const nextAt = startAt + ROUND_MS;      // старт следующего раунда
 
-    // в этом раунде спин идёт с roundStartAt по endAt
-    const startAt = roundStartAt;
-    const endAt = roundStartAt + SPIN_MS;
+    // последний завершенный раунд = тот, у которого спин закончился
+    const lastCompletedRoundId = (now >= endAt) ? roundId : Math.max(0, roundId - 1);
 
-    const nextRoundAt = roundStartAt + ROUND_MS;
-
-    // ✅ ключевой фикс истории:
-    // если спин уже закончился — считаем текущий раунд "завершенным" и добавляем в историю сразу
-    const lastCompletedRoundId = (now >= endAt) ? roundId : (roundId - 1);
-
-    await ensureHistoryUpTo(Math.max(0, lastCompletedRoundId));
+    await ensureHistoryUpTo(lastCompletedRoundId);
 
     const raw = await redis.lrange("wheel:history", 0, -1);
     const history = (raw || [])
@@ -103,15 +92,14 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       serverNow: now,
-      roundMs: ROUND_MS,
       spinMs: SPIN_MS,
       postDelayMs: POST_DELAY_MS,
-
+      roundMs: ROUND_MS,
       round: {
         roundId,
-        startAt,
-        endAt,
-        nextRoundAt,
+        startAt,       // spinStartAt
+        endAt,         // spinEndAt
+        nextAt,        // next round start
         winnerIndex: winnerForRound(roundId),
       },
       history,
