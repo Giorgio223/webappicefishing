@@ -266,12 +266,12 @@
       background: rgba(255,255,255,.60);
       box-shadow: 0 12px 26px rgba(0,0,0,.16);
       backdrop-filter: blur(6px);
-      cursor:pointer; user-select:none;
+      cursor:not-allowed; user-select:none;
       display:flex; align-items:center; justify-content:center;
       font-weight:950; color:#0b1220;
       -webkit-tap-highlight-color: transparent;
+      opacity:.55;
     }
-    .undoBtn[disabled]{ opacity:.55; cursor:not-allowed; }
 
     .betSelect{
       position:relative;
@@ -442,7 +442,7 @@
       </div>
 
       <div class="betRow">
-        <button class="undoBtn" id="undoBtn" title="Undo last bet" disabled>↩</button>
+        <button class="undoBtn" id="undoBtn" title="Undo disabled">↩</button>
 
         <div class="betSelect" id="betSelect">
           <span id="betValue">0.2</span>
@@ -744,28 +744,11 @@
     return ton;
   }
 
-  async function adjustBalance(deltaTon){
-    const raw = await getAddressRawForApi();
-    if (!raw) throw new Error("no_wallet");
-    const deltaNano = Math.trunc(Number(deltaTon) * 1e9);
-
-    const r = await fetch("/api/balance_adjust", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ address: raw, deltaNano })
-    });
-    const j = await r.json().catch(()=>({}));
-    if (!r.ok) throw new Error(j.error || "balance_adjust_failed");
-
-    if (typeof j.balanceTon === "number") setBalanceTonUI(j.balanceTon);
-    else if (typeof j.ton === "number") setBalanceTonUI(j.ton);
-    else if (typeof j.nano === "number") setBalanceTonUI(j.nano / 1e9);
-    else await refreshBalance();
-  }
-
   window.addEventListener("wallet_changed", async () => {
     await syncWalletUI();
     await bindWalletOnServer();
+    await resumeDepositsSilently();
+    await settleBetsIfNeeded();
     await refreshBalance();
   });
 
@@ -780,6 +763,7 @@
     localStorage.removeItem("walletFriendly");
     window.__wallet = null;
     await syncWalletUI();
+    setBalanceTonUI(0);
     showPopup("TON", "Кошелёк отвязан.");
   });
 
@@ -809,12 +793,27 @@
       return { ok: r2.ok, json: j2 };
     }
   }
+
+  // ✅ silent resume: депозит не потеряется при обновлении/закрытии
+  async function resumeDepositsSilently(){
+    const raw = await getAddressRawForApi();
+    if (!raw) return;
+    try{
+      await fetch(`/api/deposit_resume?address=${encodeURIComponent(raw)}`, { cache:"no-store" });
+    }catch{}
+  }
+
   async function waitAndCreditSilent(intentId){
     const raw = await getAddressRawForApi();
     if (!raw) return;
+
+    // сохраняем intent, чтобы после обновления можно было догнать
+    try{ localStorage.setItem("lastDepositIntentId", String(intentId)); }catch{}
+
     for (let i=0;i<80;i++){
       const { ok, json } = await confirmDepositTry(intentId, raw);
       if (ok && json?.status === "credited"){
+        try{ localStorage.removeItem("lastDepositIntentId"); }catch{}
         await refreshBalance();
         setTimeout(refreshBalance, 350);
         showPopup("TON", `Баланс пополнен: +${json.creditedTon} TON`);
@@ -822,7 +821,7 @@
       }
       await sleep(1500);
     }
-    showPopup("TON", "Депозит пока не подтвердился. Попробуй чуть позже.");
+    // не показываем лишнее — просто попросим зайти позже
   }
 
   document.getElementById("depositConfirm").addEventListener("click", async () => {
@@ -834,10 +833,11 @@
     if (amountTon < 0.1){ showPopup("Ошибка", "Минимум 0.1 TON"); return; }
     if (!window.__tonUI?.sendTransaction){ showPopup("TON", "TonConnect UI не готов."); return; }
 
+    // ✅ передаем address чтобы intent попал в dep:pending:<wallet>
     const r = await fetch("/api/deposit_intent", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ amountTon })
+      body: JSON.stringify({ amountTon, address: raw })
     });
     if (!r.ok){ showPopup("TON", "Сервер депозита не настроен."); return; }
     const intent = await r.json();
@@ -853,28 +853,31 @@
       });
 
       depositModal.classList.remove("open");
-      setTimeout(() => waitAndCreditSilent(intent.intentId), 9000);
+
+      // ✅ даже если юзер обновится — pending set останется на сервере
+      // здесь просто быстро пытаемся подтвердить
+      setTimeout(() => waitAndCreditSilent(intent.intentId), 8000);
     }catch(e){
       console.log(e);
       showPopup("TON", "Транзакция отменена или ошибка кошелька.");
     }
   });
 
-  /* Bets / undo */
+  /* Bets UI */
   let currentBet = 0.2;
   const betSelect = document.getElementById("betSelect");
   const betMenu = document.getElementById("betMenu");
   const betValue = document.getElementById("betValue");
   const undoBtn = document.getElementById("undoBtn");
 
-  const totals = new Map();
-  const actions = [];
+  // Undo отключен (чтобы не делать дыру без server undo)
+  undoBtn.addEventListener("click", (e) => { e.stopPropagation(); });
 
+  const totals = new Map(); // target -> ton
   function fmt(x){
     const s = (Math.round(x*10)/10).toFixed(1);
     return s.endsWith(".0") ? s.slice(0,-2) : s;
   }
-  function updateUndoState(){ undoBtn.disabled = actions.length === 0; }
   function closeBetMenu(){ betMenu.classList.remove("open"); }
   function toggleBetMenu(){ betMenu.classList.toggle("open"); }
 
@@ -903,46 +906,76 @@
     }
   }
 
+  function clearAllBetsUI(){
+    totals.clear();
+    document.querySelectorAll(".bettable").forEach(btn => {
+      const badge = btn.querySelector(".placedBet");
+      if (badge) badge.remove();
+    });
+  }
+
+  // ✅ Server bet place
   async function addBet(target, amountTon){
     if (!getWalletRawLS()){ showPopup("Ставки", "Сначала привяжи кошелёк."); return; }
+    if (!S?.round?.roundId && S?.round?.roundId !== 0){ showPopup("Ставки", "Нет данных раунда."); return; }
+
+    const raw = await getAddressRawForApi();
+    const roundId = Number(S.round.roundId);
+    const amountNano = Math.trunc(Number(amountTon) * 1e9);
+
     if (balanceTonCache + 1e-9 < amountTon){
       showPopup("Баланс", `Недостаточно средств. Нужно минимум ${fmt(amountTon)} TON`);
       return;
     }
-    try{ await adjustBalance(-amountTon); }catch{
-      showPopup("Баланс", "Не удалось списать баланс.");
+
+    const r = await fetch("/api/bet_place", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ address: raw, roundId, target, amountNano })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok){
+      if (j?.error === "insufficient") showPopup("Баланс", "Недостаточно средств.");
+      else showPopup("Ставки", "Не удалось поставить.");
       return;
     }
+
+    if (typeof j.balanceTon === "number") setBalanceTonUI(j.balanceTon);
+    else await refreshBalance();
+
     const prev = totals.get(target) || 0;
     const next = Math.round((prev + amountTon) * 10) / 10;
     totals.set(target, next);
-    actions.push({ target, amountTon });
     renderTotalOnButton(target);
-    updateUndoState();
   }
 
-  async function undoLast(){
-    if (actions.length === 0) return;
-    const last = actions.pop();
-    const prev = totals.get(last.target) || 0;
-    const next = Math.round((prev - last.amountTon) * 10) / 10;
-    if (next <= 0) totals.delete(last.target);
-    else totals.set(last.target, next);
-
-    try{ await adjustBalance(+last.amountTon); }catch{
-      actions.push(last);
-      totals.set(last.target, prev);
-      showPopup("Баланс", "Не удалось вернуть баланс.");
-      return;
-    }
-    renderTotalOnButton(last.target);
-    updateUndoState();
-  }
-
-  undoBtn.addEventListener("click", (e) => { e.stopPropagation(); undoLast(); });
   document.querySelectorAll(".bettable").forEach(btn => {
     btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
+
+  // ✅ settlement (после конца спина + при заходе/обновлении)
+  async function settleBetsIfNeeded(){
+    const raw = await getAddressRawForApi();
+    if (!raw) return;
+    try{
+      const r = await fetch("/api/bet_settle", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ address: raw })
+      });
+      const j = await r.json().catch(()=>({}));
+      if (!r.ok) return;
+
+      if (Array.isArray(j.settled) && j.settled.length){
+        // ставки этого/прошлых раундов закрыли — чистим UI
+        clearAllBetsUI();
+      }
+
+      if (j.creditedTonTotal && j.creditedTonTotal > 0){
+        await refreshBalance();
+      }
+    }catch{}
+  }
 
   /* ========= WHEEL SYNC ========= */
 
@@ -1005,7 +1038,6 @@
     return ((a%t)+t)%t;
   }
   function wrapNear(ref, value){
-    // возвращаем эквивалент value (±2π*k), который ближе всего к ref (без скачка)
     const t = Math.PI*2;
     let v = value;
     v += Math.round((ref - v)/t)*t;
@@ -1204,28 +1236,26 @@
     }
   }
 
-  /* ---- SERVER TIME (NO JITTER) ---- */
+  /* ---- SERVER TIME (NO WOBBLE ON FIRST JOIN) ---- */
 
-  // плавный оффсет (чтобы не было “перемотки”)
   let timeOffset = 0;
-  const OFFSET_SMOOTH = 0.12;
+  let syncedOnce = false;
 
-  // монотонное “серверное время” на клиенте (никогда не идет назад)
-  let monoServerNow = Date.now();
-  let lastLocalNow = Date.now();
+  let baseServerNow = Date.now();
+  let baseLocalNow = Date.now();
 
-  function updateMonotonicServerTime(){
-    const local = Date.now();
-    const dt = Math.max(0, local - lastLocalNow);
-    lastLocalNow = local;
-    monoServerNow += dt; // просто двигаем вперед
-    return monoServerNow;
-  }
+  let lastServerNow = 0;
+  const OFFSET_SLEW = 0.22;
 
   function serverTimeNow(){
-    // монотонное время + плавный оффсет
-    const base = updateMonotonicServerTime();
-    return base + timeOffset;
+    const local = Date.now();
+    let est = baseServerNow + (local - baseLocalNow) + timeOffset;
+
+    if (syncedOnce){
+      if (est < lastServerNow) est = lastServerNow;
+      lastServerNow = est;
+    }
+    return est;
   }
 
   async function fetchState(){
@@ -1236,8 +1266,10 @@
 
   /* ========= SYNCHRONIZED PHASE ========= */
 
+  // должно совпадать с state.js
   const SPIN_MS = 8600;
   const POST_DELAY_MS = 15000;
+
   const SPIN_TURNS = 22;
 
   function easeOutQuint(t){ return 1 - Math.pow(1-t, 5); }
@@ -1254,20 +1286,16 @@
     return desiredMod + k * (Math.PI*2);
   }
 
-  // angles
   let renderAngle = 0;
-  const ANGLE_SMOOTH = 0.16; // плавность отрисовки (без рывков)
+  const ANGLE_SMOOTH = 0.16;
 
-  // state
   let S = null;
 
-  // anchors
   let anchorRoundId = null;
   let anchorStartAngle = 0;
   let anchorTargetAngle = 0;
   let anchorWinner = 0;
 
-  // times
   let spinStartAt = 0;
   let endAt = 0;
   let nextSpinAt = 0;
@@ -1304,55 +1332,52 @@
   function applyState(state){
     S = state;
 
-    // 1) плавно обновляем timeOffset
+    // ✅ time sync (first time hard, then slew)
     const targetOffset = (state.serverNow || Date.now()) - Date.now();
-    timeOffset = timeOffset + (targetOffset - timeOffset) * OFFSET_SMOOTH;
 
-    // 2) история: показываем state.history как есть
+    if (!syncedOnce){
+      syncedOnce = true;
+      timeOffset = targetOffset;
+      baseServerNow = state.serverNow || Date.now();
+      baseLocalNow = Date.now();
+      lastServerNow = baseServerNow + timeOffset;
+    } else {
+      timeOffset = timeOffset + (targetOffset - timeOffset) * OFFSET_SLEW;
+    }
+
+    // history from server
     const listAll = (state.history || []).slice().sort((a,b)=>a.roundId-b.roundId);
     history.length = 0;
     for (const item of listAll.slice(-HISTORY_MAX)) history.push(item.winnerIndex);
     renderHistory();
 
-    // 3) времена раунда — берем прямо из API
     const rid = state.round.roundId;
     const winner = state.round.winnerIndex;
 
-    // важно: api/state.js у тебя теперь startAt = начало спина
     spinStartAt = state.round.startAt;
     endAt = state.round.endAt;
     nextSpinAt = endAt + POST_DELAY_MS;
 
-    // 4) смена раунда: подхват без скачка
     if (anchorRoundId !== rid || anchorWinner !== winner || anchorRoundId === null){
       anchorRoundId = rid;
       anchorWinner = winner;
 
-      // стартовая позиция = “результат прошлого раунда”
-      // берем последний элемент истории, который относится к прошлому завершенному раунду:
-      // (после конца спина текущего раунда — он уже добавлен в history, и это ОК)
       let prevWinnerIdx = null;
       if (listAll.length >= 1){
-        const last = listAll[listAll.length - 1];
-        // если последний элемент — это не прошлый раунд, а текущий уже завершенный — тоже нормально:
-        // старт следующего раунда должен быть именно на прошлом результате.
-        prevWinnerIdx = last.winnerIndex;
+        prevWinnerIdx = listAll[listAll.length - 1].winnerIndex;
       }
 
       const desiredStart = (typeof prevWinnerIdx === "number")
         ? desiredAngleForWinner(prevWinnerIdx)
         : renderAngle;
 
-      // подбираем эквивалент (±2π) ближе к текущему renderAngle
       anchorStartAngle = wrapNear(renderAngle, desiredStart);
 
       const rawTarget = buildTargetAngleFromStart(anchorStartAngle, winner);
-      // и target тоже подбираем непрерывно (чтобы не было скачка)
       anchorTargetAngle = wrapNear(anchorStartAngle - (SPIN_TURNS * Math.PI*2), rawTarget);
     }
   }
 
-  // HUD: during spin = hidden, after spin = 15..0
   const hudMain = document.getElementById("hudMain");
 
   function setHUD(){
@@ -1361,7 +1386,7 @@
     const now = serverTimeNow();
 
     if (now >= spinStartAt && now <= endAt){
-      hudMain.textContent = ""; // во время спина ничего
+      hudMain.textContent = ""; // во время спина не показываем
       return;
     }
 
@@ -1371,7 +1396,6 @@
       return;
     }
 
-    // до спина показываем сколько осталось до старта (но не показываем “8 сек спина”)
     if (now < spinStartAt){
       const left = Math.max(0, Math.ceil((spinStartAt - now)/1000));
       hudMain.textContent = String(left);
@@ -1392,30 +1416,47 @@
     return anchorStartAngle + (anchorTargetAngle - anchorStartAngle) * k;
   }
 
-  // celebrate once per round end
+  // celebration + settlement trigger once per round end
   let celebratedRoundId = null;
-  function maybeCelebrate(now){
+  let settledRoundId = null;
+
+  function winnerKindFromIndex(i){
+    if (i === 0) return "hugered";
+    if (i === 13 || i === 39) return "bigoranges";
+    if (i === 7 || i === 20 || i === 33 || i === 46) return "lilblues";
+    return "leaf";
+  }
+
+  function maybeEndOfSpinActions(now){
     if (!S) return;
     if (now < endAt) return;
-    if (celebratedRoundId === anchorRoundId) return;
-    celebratedRoundId = anchorRoundId;
 
-    const sec = sectors[anchorWinner];
-    if (sec?.icon === "fish") celebrateFish(sec.kind);
+    // confetti once
+    if (celebratedRoundId !== anchorRoundId){
+      celebratedRoundId = anchorRoundId;
+      const kind = winnerKindFromIndex(anchorWinner);
+      if (kind !== "leaf") celebrateFish(kind);
+    }
+
+    // settle once
+    if (settledRoundId !== anchorRoundId){
+      settledRoundId = anchorRoundId;
+      setTimeout(settleBetsIfNeeded, 200);
+      setTimeout(refreshBalance, 600);
+    }
   }
 
   function raf(now){
     const sn = serverTimeNow();
     const trueAngle = computeTrueAngle(sn);
 
-    // сглаживаем именно угол (это убирает микро-рывки)
     renderAngle = renderAngle + (trueAngle - renderAngle) * ANGLE_SMOOTH;
 
     const hi = indexAtPointer(renderAngle);
     drawWheel(renderAngle, hi);
     updatePointerFlex(now);
     setHUD();
-    maybeCelebrate(sn);
+    maybeEndOfSpinActions(sn);
 
     requestAnimationFrame(raf);
   }
@@ -1433,13 +1474,33 @@
     if (getWalletRawLS()) await bindWalletOnServer();
     await refreshBalance();
 
+    // ✅ депозит не потеряется
+    await resumeDepositsSilently();
+    const lastIntent = (localStorage.getItem("lastDepositIntentId") || "").trim();
+    if (lastIntent && getWalletRawLS()){
+      const raw = await getAddressRawForApi();
+      if (raw) confirmDepositTry(lastIntent, raw).catch(()=>{});
+    }
+
+    // ✅ если юзер обновился — ставки/выигрыш догонятся
+    await settleBetsIfNeeded();
+
     drawWheel(renderAngle, null);
     renderHistory();
-    updateUndoState();
 
     await syncLoop();
-    setInterval(syncLoop, 700);
+
+    // state polling (не слишком часто для нагрузки)
+    setInterval(syncLoop, 1100);
+
+    // баланс
     setInterval(refreshBalance, 5000);
+
+    // resume deposits
+    setInterval(resumeDepositsSilently, 12000);
+
+    // settle safety net
+    setInterval(settleBetsIfNeeded, 6500);
 
     requestAnimationFrame(raf);
   })();
