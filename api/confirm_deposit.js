@@ -33,7 +33,6 @@ function pickFirstString(...vals) {
 }
 
 function getComment(tx) {
-  // разные варианты где tonapi может отдать текст
   return pickFirstString(
     tx?.in_msg?.decoded_body?.comment,
     tx?.in_msg?.decoded_body?.text,
@@ -82,6 +81,8 @@ export default async function handler(req, res) {
     const intent = typeof intentRaw === "string" ? JSON.parse(intentRaw) : intentRaw;
 
     if (intent.status === "credited") {
+      // на всякий случай чистим pending
+      await redis.srem(`dep:pending:${userWallet}`, intentId);
       return res.status(200).json({
         status: "credited",
         creditedTon: Number(intent.amountNano) / 1e9,
@@ -111,42 +112,38 @@ export default async function handler(req, res) {
       break;
     }
 
-    if (!matched) {
-      return res.status(200).json({
-        status: "pending",
-        checked: list.length,
-      });
-    }
+    if (!matched) return res.status(200).json({ status: "pending", checked: list.length });
 
     const txHash = getHash(matched);
     if (!txHash) return res.status(200).json({ status: "pending" });
 
-    // защита от двойного credit
+    // идемпотентность по tx_hash
     const txKey = `dep:tx:${txHash}`;
     const locked = await redis.set(txKey, "1", { nx: true, ex: 24 * 60 * 60 });
 
-    if (!locked) {
-      // уже кредитили по этой транзе — просто пометим intent
-      const newIntent = { ...intent, status: "credited", creditedAt: Date.now(), txHash, creditedTo: userWallet };
-      await redis.set(`dep:intent:${intentId}`, JSON.stringify(newIntent), { ex: 60 * 60 });
+    const markCredited = async () => {
+      const newIntent = {
+        ...intent,
+        status: "credited",
+        creditedAt: Date.now(),
+        txHash,
+        creditedTo: userWallet,
+      };
+      await redis.set(`dep:intent:${intentId}`, JSON.stringify(newIntent), { ex: 24 * 60 * 60 });
       await redis.set(`dep:credited:${intentId}`, JSON.stringify(newIntent), { ex: 24 * 60 * 60 });
+      await redis.srem(`dep:pending:${userWallet}`, intentId);
+    };
 
+    if (!locked) {
+      await markCredited();
       return res.status(200).json({ status: "credited", creditedTon: needNano / 1e9 });
     }
 
-    // начисление баланса
-    const balKey = `bal:${userWallet}`;
-    await redis.incrby(balKey, needNano);
+    // начисляем
+    await redis.incrby(`bal:${userWallet}`, needNano);
+    await markCredited();
 
-    const newIntent = { ...intent, status: "credited", creditedAt: Date.now(), txHash, creditedTo: userWallet };
-
-    await redis.set(`dep:intent:${intentId}`, JSON.stringify(newIntent), { ex: 60 * 60 });
-    await redis.set(`dep:credited:${intentId}`, JSON.stringify(newIntent), { ex: 24 * 60 * 60 });
-
-    return res.status(200).json({
-      status: "credited",
-      creditedTon: needNano / 1e9,
-    });
+    return res.status(200).json({ status: "credited", creditedTon: needNano / 1e9 });
   } catch (e) {
     return res.status(500).json({ error: "confirm_error", message: String(e) });
   }
