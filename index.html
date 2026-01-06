@@ -550,53 +550,64 @@
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-  // ----------------------------
-  // ✅ Address rules (IMPORTANT)
-  // ----------------------------
-  // 1) TonConnect всегда работает с RAW адресом "0:..."
-  // 2) Для UI/бэка можно конвертировать в friendly "UQ/EQ..."
+  // -------------------------------------------------
+  // ✅ Address utils (RAW everywhere + conversion)
+  // -------------------------------------------------
   let __tonCore = null;
   async function tonCore(){
     if (!__tonCore) __tonCore = await import("https://esm.sh/@ton/core@0.58.0");
     return __tonCore;
   }
 
-  async function rawToFriendly(raw){
-    const a = String(raw || "").trim();
+  async function toRaw(addr){
+    const a = String(addr || "").trim();
     if (!a) return null;
-    if (!a.startsWith("0:")) return a; // уже friendly
-    try{
-      const { Address } = await tonCore();
-      return Address.parse(a).toString({ urlSafe:true, bounceable:false, testOnly:false });
-    }catch(e){
-      console.log("rawToFriendly error", e);
-      return null;
-    }
+    const { Address } = await tonCore();
+    return Address.parse(a).toRawString(); // "0:..."
+  }
+
+  async function toFriendly(addr){
+    const a = String(addr || "").trim();
+    if (!a) return null;
+    const { Address } = await tonCore();
+    return Address.parse(a).toString({ urlSafe:true, bounceable:false, testOnly:false });
   }
 
   function shortAddr(a){ return a ? (a.slice(0,6) + "..." + a.slice(-6)) : ""; }
 
-  // ✅ Храним RAW в localStorage (важно для Telegram Wallet)
-  function getWalletRaw(){
+  // ✅ always store RAW in localStorage
+  function getWalletRawLS(){
     const ls = (localStorage.getItem("walletRaw") || "").trim();
-    if (ls) return ls;
-    const raw = (window.__wallet?.account?.address || "").trim();
-    return raw || null;
+    return ls || null;
   }
 
-  async function getWalletFriendly(){
-    const raw = getWalletRaw();
-    if (!raw) return null;
+  async function setWalletFromTonConnect(wallet){
+    const addr = (wallet?.account?.address || "").trim(); // может быть EQ/UQ/0:
+    if (!addr){
+      localStorage.removeItem("walletRaw");
+      localStorage.removeItem("walletFriendly");
+      return;
+    }
+    const raw = await toRaw(addr);
+    localStorage.setItem("walletRaw", raw);
+    // friendly кэш (чтобы быстро показывать)
+    const fr = await toFriendly(raw);
+    if (fr) localStorage.setItem("walletFriendly", fr);
+  }
+
+  async function getWalletFriendlyLS(){
     const cached = (localStorage.getItem("walletFriendly") || "").trim();
     if (cached) return cached;
-    const friendly = await rawToFriendly(raw);
-    if (friendly) localStorage.setItem("walletFriendly", friendly);
-    return friendly;
+    const raw = getWalletRawLS();
+    if (!raw) return null;
+    const fr = await toFriendly(raw);
+    if (fr) localStorage.setItem("walletFriendly", fr);
+    return fr;
   }
 
-  // -------------------------
+  // -------------------------------------------------
   // ✅ TonConnect init
-  // -------------------------
+  // -------------------------------------------------
   (function initTonConnect(){
     try{
       if (!window.TON_CONNECT_UI || !window.TON_CONNECT_UI.TonConnectUI) {
@@ -608,7 +619,6 @@
 
       const TonConnectUI = window.TON_CONNECT_UI.TonConnectUI;
 
-      // ✅ Жёстко указываем абсолютный манифест (Vercel + TG webview)
       const tonUI = new TonConnectUI({
         manifestUrl: "https://icefishing.business/tonconnect-manifest.json"
       });
@@ -616,18 +626,16 @@
       window.__tonUI = tonUI;
       window.__wallet = null;
 
-      // ✅ ВАЖНО: сохраняем RAW, НЕ friendly
-      tonUI.onStatusChange((wallet) => {
+      tonUI.onStatusChange(async (wallet) => {
         window.__wallet = wallet || null;
 
-        const raw = (wallet?.account?.address || "").trim();
-        if (raw){
-          localStorage.setItem("walletRaw", raw);
-        } else {
+        try{
+          await setWalletFromTonConnect(wallet);
+        }catch(e){
+          console.log("wallet parse error", e);
           localStorage.removeItem("walletRaw");
+          localStorage.removeItem("walletFriendly");
         }
-        // friendly кэш сбросим — пересчитаем при надобности
-        localStorage.removeItem("walletFriendly");
 
         window.dispatchEvent(new Event("wallet_changed"));
       });
@@ -643,7 +651,43 @@
     }
   })();
 
-  // ✅ BOC payload comment (фикс "Invalid magic")
+  // -------------------------------------------------
+  // ✅ Telegram bind wallet (server stores RAW)
+  // -------------------------------------------------
+  async function bindWalletOnServer(){
+    const raw = getWalletRawLS();
+    if (!raw) return;
+
+    const initData = tg?.initData || "";
+    if (!initData){
+      // если открыто не в Telegram — просто пропускаем
+      return;
+    }
+
+    try{
+      const r = await fetch("/api/bind_wallet", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          initData,
+          walletAddress: raw
+        })
+      });
+
+      const j = await r.json().catch(()=>({}));
+      if (!r.ok){
+        console.log("bind_wallet failed", r.status, j);
+        return;
+      }
+      // ок
+    }catch(e){
+      console.log("bind_wallet error", e);
+    }
+  }
+
+  // -------------------------------------------------
+  // ✅ BOC payload comment (фикс “Invalid magic”)
+  // -------------------------------------------------
   function bytesToBase64(bytes){
     let bin = "";
     for (const b of bytes) bin += String.fromCharCode(b);
@@ -681,35 +725,34 @@
   }
 
   async function syncWalletUI(){
-    const raw = getWalletRaw();
+    const raw = getWalletRawLS();
     if (!raw){
       tonBtnText.textContent = "TON connect";
       walletStatus.textContent = "Not connected";
       setBalanceTonUI(0);
       return;
     }
-    const friendly = await getWalletFriendly();
+    const friendly = await getWalletFriendlyLS();
     const show = friendly || raw;
     tonBtnText.textContent = shortAddr(show);
     walletStatus.textContent = shortAddr(show);
   }
 
-  // -------------------------
-  // ✅ API helpers (we send friendly if possible)
-  // -------------------------
-  async function getAddressForApi(){
-    // Если бэк принимает raw — он тоже подойдет.
-    // Но чтобы не ломать случаи, где бэк ждёт UQ/EQ — берём friendly, если смогли.
-    const friendly = await getWalletFriendly();
-    if (friendly) return friendly;
-    return getWalletRaw();
+  // -------------------------------------------------
+  // ✅ API helpers (ALWAYS send RAW to backend)
+  // -------------------------------------------------
+  async function getAddressRawForApi(){
+    const raw = getWalletRawLS();
+    if (!raw) return null;
+    // на всякий случай нормализуем (если кто-то руками записал не RAW)
+    try{ return await toRaw(raw); }catch{ return raw; }
   }
 
   async function refreshBalance(){
-    const addr = await getAddressForApi();
-    if (!addr){ setBalanceTonUI(0); return 0; }
+    const raw = await getAddressRawForApi();
+    if (!raw){ setBalanceTonUI(0); return 0; }
 
-    const r = await fetch(`/api/balance?address=${encodeURIComponent(addr)}`, { cache:"no-store" });
+    const r = await fetch(`/api/balance?address=${encodeURIComponent(raw)}`, { cache:"no-store" });
     if (!r.ok) return balanceTonCache;
 
     const j = await r.json().catch(()=>({}));
@@ -719,8 +762,6 @@
     else if (typeof j.ton === "number") ton = j.ton;
     else if (typeof j.nano === "number") ton = j.nano / 1e9;
     else if (typeof j.nano === "string" && j.nano) ton = Number(j.nano) / 1e9;
-    else if (typeof j.balanceTon === "string") ton = Number(j.balanceTon);
-    else if (typeof j.ton === "string") ton = Number(j.ton);
 
     if (!Number.isFinite(ton)) ton = 0;
     setBalanceTonUI(ton);
@@ -728,14 +769,15 @@
   }
 
   async function adjustBalance(deltaTon){
-    const addr = await getAddressForApi();
-    if (!addr) throw new Error("no_wallet");
+    const raw = await getAddressRawForApi();
+    if (!raw) throw new Error("no_wallet");
+
     const deltaNano = Math.trunc(Number(deltaTon) * 1e9);
 
     const r = await fetch("/api/balance_adjust", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ address: addr, deltaNano })
+      body: JSON.stringify({ address: raw, deltaNano })
     });
 
     const j = await r.json().catch(()=>({}));
@@ -749,10 +791,11 @@
 
   window.addEventListener("wallet_changed", async () => {
     await syncWalletUI();
+    await bindWalletOnServer();   // ✅ вот это критически важно
     await refreshBalance();
   });
 
-  // Bind (любой кошелёк)
+  // Bind (TonConnect modal)
   document.getElementById("actionBind").addEventListener("click", async () => {
     if (window.__tonUI?.openModal){
       await window.__tonUI.openModal();
@@ -773,14 +816,14 @@
 
   // Deposit open
   document.getElementById("actionDeposit").addEventListener("click", async () => {
-    const raw = getWalletRaw();
+    const raw = getWalletRawLS();
     if (!raw){ showPopup("TON", "Сначала привяжи кошелёк."); return; }
     depositModal.classList.add("open");
   });
 
   // Deposit confirm
   document.getElementById("depositConfirm").addEventListener("click", async () => {
-    const raw = getWalletRaw();
+    const raw = await getAddressRawForApi();
     if (!raw){ showPopup("TON", "Сначала привяжи кошелёк."); return; }
 
     const amountTon = Number(document.getElementById("depositAmount").value);
@@ -792,15 +835,18 @@
       return;
     }
 
-    // ✅ API может хотеть friendly address — передадим его если возможно
-    const addrForApi = await getAddressForApi();
-
+    // ✅ создаём intent
     const r = await fetch("/api/deposit_intent", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ amountTon, address: addrForApi })
+      body: JSON.stringify({ amountTon })
     });
-    if (!r.ok){ showPopup("TON", "Сервер депозита не настроен."); return; }
+    if (!r.ok){
+      const t = await r.text().catch(()=> "");
+      console.log("deposit_intent failed", r.status, t);
+      showPopup("TON", "Сервер депозита не настроен.");
+      return;
+    }
     const intent = await r.json();
 
     try{
@@ -813,7 +859,7 @@
       await window.__tonUI.sendTransaction({
         validUntil: Math.floor(Date.now()/1000) + 300,
         messages:[{
-          address: intent.toAddress,
+          address: intent.toAddressFriendly || intent.toAddressRaw || intent.toAddress,
           amount: String(intent.amountNano),
           payload: await commentToBocBase64(intent.comment || "")
         }]
@@ -826,13 +872,14 @@
       }, 45_000);
 
     }catch(e){
+      console.log("sendTransaction error", e);
       showPopup("TON", "Транзакция отменена или ошибка кошелька.");
     }
   });
 
   async function waitAndCredit(intentId){
-    const addrForApi = await getAddressForApi();
-    if (!addrForApi){
+    const raw = await getAddressRawForApi();
+    if (!raw){
       showPopup("TON", "Сначала подключи кошелёк.");
       return;
     }
@@ -841,7 +888,7 @@
       const r = await fetch("/api/confirm_deposit", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ intentId, address: addrForApi })
+        body: JSON.stringify({ intentId, address: raw })
       });
 
       if (r.ok){
@@ -851,6 +898,10 @@
           setTimeout(refreshBalance, 300);
           showPopup("TON", `Баланс пополнен: +${j.creditedTon} TON`);
           return;
+        }
+        if (j.status === "wait" && j.retryAfterMs){
+          await sleep(Math.min(2000, Number(j.retryAfterMs)));
+          continue;
         }
       }
 
@@ -908,7 +959,7 @@
   }
 
   async function addBet(target, amountTon){
-    const raw = getWalletRaw();
+    const raw = getWalletRawLS();
     if (!raw){ showPopup("Ставки", "Сначала привяжи кошелёк."); return; }
 
     if (balanceTonCache + 1e-9 < amountTon){
@@ -918,7 +969,8 @@
 
     try{
       await adjustBalance(-amountTon);
-    }catch{
+    }catch(e){
+      console.log(e);
       showPopup("Баланс", "Не удалось списать баланс.");
       return;
     }
@@ -942,7 +994,8 @@
 
     try{
       await adjustBalance(+last.amountTon);
-    }catch{
+    }catch(e){
+      console.log(e);
       actions.push(last);
       totals.set(last.target, prev);
       showPopup("Баланс", "Не удалось вернуть баланс.");
@@ -1288,7 +1341,7 @@
     await new Promise(resolve=>{
       function frame(now){
         const t = Math.min(1, (now - t0) / SPIN_MS);
-        const k = easeOutCubic(t);
+        const k = 1 - Math.pow(1-t, 3);
         angle = start + (end - start) * k;
         drawWheel(indexAtPointer(angle));
         if (t < 1) requestAnimationFrame(frame);
@@ -1304,7 +1357,6 @@
     clearAllBetsUI();
     await refreshBalance();
 
-    // задержка истории 2 сек
     await sleep(2000);
 
     const serverDone = (lastServerHistoryRoundId !== null && roundId <= lastServerHistoryRoundId);
@@ -1341,6 +1393,7 @@
   // init
   (async function initAll(){
     await syncWalletUI();
+    if (getWalletRawLS()) await bindWalletOnServer();
     await refreshBalance();
     drawWheel(null);
     renderHistory();
