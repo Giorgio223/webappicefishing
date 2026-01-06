@@ -6,15 +6,15 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// ✅ требования под твой фронт/логику
+// ✅ тайминги
 const SPIN_MS = 8600;          // длительность вращения
-const POST_DELAY_MS = 15000;   // 15 сек после окончания спина
-const ROUND_MS = SPIN_MS + POST_DELAY_MS; // полный цикл раунда
+const POST_DELAY_MS = 15000;   // пауза после остановки
+const ROUND_MS = SPIN_MS + POST_DELAY_MS;
 
 const N = 53;
 const HISTORY_MAX = 18;
 
-// защита от сильного сдвига истории (в раундах)
+// если вдруг история улетела далеко (защита)
 const MAX_ROUND_DRIFT = 60 * 60;
 
 function winnerForRound(roundId) {
@@ -37,6 +37,8 @@ async function rebuildHistory(lastCompletedRoundId) {
 }
 
 async function ensureHistoryUpTo(lastCompletedRoundId) {
+  if (lastCompletedRoundId < 0) return;
+
   const lockKey = `wheel:lock:${lastCompletedRoundId}`;
   const got = await redis.set(lockKey, "1", { nx: true, px: 5000 });
   if (!got) return;
@@ -76,18 +78,21 @@ export default async function handler(req, res) {
 
     const now = Date.now();
 
-    // ✅ roundId теперь по ROUND_MS (8.6s spin + 15s pause)
+    // roundId идёт по циклу SPIN+PAUSE
     const roundId = Math.floor(now / ROUND_MS);
     const roundStartAt = roundId * ROUND_MS;
 
-    // ✅ время спина и паузы внутри раунда
-    const spinStartAt = roundStartAt;          // начало вращения
-    const endAt = roundStartAt + SPIN_MS;      // конец вращения
-    const nextRoundAt = roundStartAt + ROUND_MS; // начало следующего раунда
+    // в этом раунде спин идёт с roundStartAt по endAt
+    const startAt = roundStartAt;
+    const endAt = roundStartAt + SPIN_MS;
 
-    const lastCompletedRoundId = Math.max(0, roundId - 1);
+    const nextRoundAt = roundStartAt + ROUND_MS;
 
-    await ensureHistoryUpTo(lastCompletedRoundId);
+    // ✅ ключевой фикс истории:
+    // если спин уже закончился — считаем текущий раунд "завершенным" и добавляем в историю сразу
+    const lastCompletedRoundId = (now >= endAt) ? roundId : (roundId - 1);
+
+    await ensureHistoryUpTo(Math.max(0, lastCompletedRoundId));
 
     const raw = await redis.lrange("wheel:history", 0, -1);
     const history = (raw || [])
@@ -98,17 +103,15 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       serverNow: now,
-
-      // полезно для клиента (если захочешь)
       roundMs: ROUND_MS,
       spinMs: SPIN_MS,
       postDelayMs: POST_DELAY_MS,
 
       round: {
         roundId,
-        startAt: spinStartAt,  // ✅ теперь startAt = начало спина
-        endAt,                 // ✅ конец спина
-        nextRoundAt,           // ✅ когда начнётся следующий раунд
+        startAt,
+        endAt,
+        nextRoundAt,
         winnerIndex: winnerForRound(roundId),
       },
       history,
