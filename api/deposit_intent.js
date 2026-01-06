@@ -4,7 +4,7 @@ import { Address } from "@ton/core";
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REST_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
 function toNano(amountTon) {
@@ -14,7 +14,6 @@ function toNano(amountTon) {
 }
 
 function canonicalFriendly(addr) {
-  // всегда храним и отдаём один формат friendly urlSafe
   const a = Address.parse(String(addr));
   return a.toString({ urlSafe: true, bounceable: false, testOnly: false });
 }
@@ -22,20 +21,18 @@ function canonicalFriendly(addr) {
 export default async function handler(req, res) {
   try {
     res.setHeader("Cache-Control", "no-store");
+    if (req.method !== "POST") return res.status(405).json({ error: "method" });
 
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "method" });
-    }
-
-    const { amountTon } = req.body || {};
+    const { amountTon, address } = req.body || {};
     const amountNano = toNano(amountTon);
-    if (!amountNano || amountNano <= 0) {
-      return res.status(400).json({ error: "bad_amount" });
-    }
+    if (!amountNano || amountNano <= 0) return res.status(400).json({ error: "bad_amount" });
 
     const TREASURY = process.env.TREASURY_TON_ADDRESS;
-    if (!TREASURY) {
-      return res.status(500).json({ error: "no_treasury_address" });
+    if (!TREASURY) return res.status(500).json({ error: "no_treasury_address" });
+
+    let userWallet = null;
+    if (address) {
+      try { userWallet = canonicalFriendly(address); } catch { userWallet = null; }
     }
 
     const toAddressFriendly = canonicalFriendly(TREASURY);
@@ -50,15 +47,22 @@ export default async function handler(req, res) {
       toAddressRaw,
       toAddressFriendly,
       amountNano: String(amountNano),
-      amountTon: Number(amountNano) / 1e9,
-      amountTonExact: Number(amountNano) / 1e9,
+      amountTon: amountNano / 1e9,
+      amountTonExact: amountNano / 1e9,
       comment,
       createdAt: Date.now(),
       status: "created",
+      userWallet, // может быть null
     };
 
-    // Храним 1 час
-    await redis.set(`dep:intent:${intentId}`, JSON.stringify(intent), { ex: 60 * 60 });
+    // intent храним 24 часа (чтобы “после закрытия” тоже успел)
+    await redis.set(`dep:intent:${intentId}`, JSON.stringify(intent), { ex: 24 * 60 * 60 });
+
+    // если знаем кошелёк юзера — добавляем в pending
+    if (userWallet) {
+      await redis.sadd(`dep:pending:${userWallet}`, intentId);
+      await redis.expire(`dep:pending:${userWallet}`, 24 * 60 * 60);
+    }
 
     return res.status(200).json(intent);
   } catch (e) {
