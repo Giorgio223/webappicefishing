@@ -11,7 +11,15 @@ const TREASURY = process.env.TREASURY_TON_ADDRESS;
 const MIN_WAIT_MS = 45_000;
 
 function normalizeToRaw(addressLike) {
-  return Address.parse(String(addressLike).trim()).toRawString(); // всегда "0:..."
+  return Address.parse(String(addressLike).trim()).toRawString(); // "0:..."
+}
+
+function rawToFriendly(raw) {
+  return Address.parse(raw).toString({
+    urlSafe: true,
+    bounceable: false,
+    testOnly: false,
+  });
 }
 
 async function tonapiGet(path) {
@@ -21,11 +29,8 @@ async function tonapiGet(path) {
 
   const text = await r.text();
   let j = {};
-  try {
-    j = JSON.parse(text);
-  } catch {
-    j = { raw: text };
-  }
+  try { j = JSON.parse(text); } catch { j = { raw: text }; }
+
   if (!r.ok) throw new Error(`tonapi_${r.status}:${j.error || j.message || "unknown"}`);
   return j;
 }
@@ -39,24 +44,20 @@ export default async function handler(req, res) {
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
     const intentId = String(body.intentId || "").trim();
-    const userWalletIn = String(body.address || "").trim(); // может быть EQ/UQ/0:...
+    const userWalletIn = String(body.address || "").trim();
+
     if (!intentId || !userWalletIn) return res.status(400).json({ error: "bad_request" });
 
-    // ✅ нормализуем адрес пользователя в RAW (0:...)
+    // user wallet RAW
     let userWalletRaw;
-    try {
-      userWalletRaw = normalizeToRaw(userWalletIn);
-    } catch {
-      return res.status(400).json({ error: "bad_wallet_address" });
-    }
+    try { userWalletRaw = normalizeToRaw(userWalletIn); }
+    catch { return res.status(400).json({ error: "bad_wallet_address" }); }
 
-    // ✅ нормализуем TREASURY тоже в RAW (на случай если он задан friendly)
+    // treasury RAW + friendly (в URL tonapi лучше friendly)
     let treasuryRaw;
-    try {
-      treasuryRaw = normalizeToRaw(TREASURY);
-    } catch {
-      return res.status(500).json({ error: "bad_treasury_address" });
-    }
+    try { treasuryRaw = normalizeToRaw(TREASURY); }
+    catch { return res.status(500).json({ error: "bad_treasury_address" }); }
+    const treasuryFriendly = rawToFriendly(treasuryRaw);
 
     const intentRaw = await redis.get(`dep:intent:${intentId}`);
     if (!intentRaw) return res.status(404).json({ error: "intent_not_found" });
@@ -70,8 +71,7 @@ export default async function handler(req, res) {
     }
 
     const creditedKey = `dep:credited:${intentId}`;
-    const already = await redis.get(creditedKey);
-    if (already) {
+    if (await redis.get(creditedKey)) {
       return res.status(200).json({
         status: "credited",
         creditedTon: Number(intent.amountNano || 0) / 1e9,
@@ -81,61 +81,62 @@ export default async function handler(req, res) {
     const wantAmountNano = String(intent.amountNano || "0");
     const createdAtSec = createdAt ? Math.floor(createdAt / 1000) : 0;
 
-    // ✅ Берём транзакции входящие на TREASURY
-    // В tonapi endpoint принимает friendly адрес, но RAW тоже обычно проходит.
-    // Чтобы не гадать — отправляем адрес как в env (TREASURY), но фильтруем уже через RAW.
+    // Берём входящие транзакции на TREASURY
     const txs = await tonapiGet(
-      `/blockchain/accounts/${encodeURIComponent(TREASURY)}/transactions?limit=160`
+      `/blockchain/accounts/${encodeURIComponent(treasuryFriendly)}/transactions?limit=200`
     );
+
     const list = txs.transactions || [];
-
-    // Если в intent есть comment (или payload), попробуем матчить по нему
-    // (это сильно повышает точность)
-    const wantComment = String(intent.comment || intent.payload || intentId || "").trim();
-
     let found = null;
 
     for (const tx of list) {
       const inMsg = tx.in_msg;
       if (!inMsg) continue;
 
-      // 1) сумма должна совпасть
+      // 1) amount match
       const value = String(inMsg.value || "0");
       if (value !== wantAmountNano) continue;
 
-      // 2) по времени (если знаем createdAt)
+      // 2) time check
       const utime = Number(tx.utime || tx.now || 0);
       if (createdAtSec && utime && utime < createdAtSec - 120) continue;
 
-      // 3) destination должен быть treasury (на всякий)
-      // tonapi может отдавать адреса по-разному, поэтому нормализуем
+      // 3) destination == treasury (best effort)
       try {
-        const dest = inMsg.destination ? normalizeToRaw(inMsg.destination) : "";
-        if (dest && dest !== treasuryRaw) continue;
+        const destLike = inMsg.destination || inMsg?.destination?.address;
+        if (destLike) {
+          const destRaw = normalizeToRaw(destLike);
+          if (destRaw !== treasuryRaw) continue;
+        }
+      } catch {}
+
+      // ✅ 4) SOURCE (отправитель) = кошелёк пользователя (самый надёжный матч)
+      try {
+        const srcLike = inMsg.source || inMsg?.source?.address;
+        if (!srcLike) continue;
+        const srcRaw = normalizeToRaw(srcLike);
+        if (srcRaw !== userWalletRaw) continue;
       } catch {
-        // если destination не парсится — не заваливаем, просто не фильтруем по нему
+        continue;
       }
 
-      // 4) Если есть comment/payload — матчим по нему (лучший вариант)
-      // В tonapi поле бывает "message" (текстовый комментарий)
-      const msgText = String(inMsg.message || "");
-      if (wantComment) {
-        // если в intent нет comment, wantComment = intentId
-        // тогда тоже нормально: можно передавать intentId в комментарий транзакции
-        if (msgText && msgText.includes(wantComment)) {
-          found = tx;
-          break;
-        }
-      } else {
-        // комментарий не задан — тогда достаточно суммы + времени
-        found = tx;
-        break;
-      }
+      found = tx;
+      break;
     }
 
-    if (!found) return res.status(200).json({ status: "pending" });
+    if (!found) {
+      return res.status(200).json({
+        status: "pending",
+        debug: {
+          userWalletRaw,
+          treasuryFriendly,
+          wantAmountNano,
+          createdAt,
+        }
+      });
+    }
 
-    // ✅ Начисляем баланс ТОЛЬКО по RAW ключу (как в balance.js / balance_adjust.js)
+    // ✅ credit RAW balance key
     const balKey = `bal:${userWalletRaw}`;
     const cur = Number((await redis.get(balKey)) || "0");
     const next = cur + Number(intent.amountNano || 0);
@@ -153,6 +154,8 @@ export default async function handler(req, res) {
       status: "credited",
       creditedTon: Number(intent.amountNano || 0) / 1e9,
       addressRaw: userWalletRaw,
+      balKey,
+      newBalanceNano: String(next),
     });
   } catch (e) {
     return res.status(500).json({ error: "confirm_error", message: String(e) });
