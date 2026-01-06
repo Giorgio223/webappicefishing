@@ -8,7 +8,7 @@
   <!-- Telegram WebApp -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- TonConnect UI -->
+  <!-- TonConnect UI (как в твоей вчерашней версии) -->
   <script src="https://unpkg.com/@tonconnect/ui@2.3.0/dist/tonconnect-ui.min.js"></script>
 
   <style>
@@ -590,7 +590,6 @@
     }
     const raw = await toRaw(addr);
     localStorage.setItem("walletRaw", raw);
-    // friendly кэш (чтобы быстро показывать)
     const fr = await toFriendly(raw);
     if (fr) localStorage.setItem("walletFriendly", fr);
   }
@@ -606,7 +605,7 @@
   }
 
   // -------------------------------------------------
-  // ✅ TonConnect init
+  // ✅ TonConnect init (главный фикс манифеста)
   // -------------------------------------------------
   (function initTonConnect(){
     try{
@@ -619,8 +618,16 @@
 
       const TonConnectUI = window.TON_CONNECT_UI.TonConnectUI;
 
+      // ✅ КРИТИЧНО: манифест берём с ТЕКУЩЕГО ORIGIN (как в твоей вчерашней версии)
+      const manifestUrl = location.origin + "/tonconnect-manifest.json";
+
       const tonUI = new TonConnectUI({
-        manifestUrl: "https://icefishing.business/tonconnect-manifest.json"
+        manifestUrl,
+        actionsConfiguration: {
+          // ✅ ОБЯЗАТЕЛЬНО: поставь своего бота
+          // пример: "https://t.me/icefishing_bot?startapp=1"
+          twaReturnUrl: "https://t.me/ICE_FISHING_ICE_BOT?startapp=1"
+        }
       });
 
       window.__tonUI = tonUI;
@@ -679,7 +686,6 @@
         console.log("bind_wallet failed", r.status, j);
         return;
       }
-      // ок
     }catch(e){
       console.log("bind_wallet error", e);
     }
@@ -744,7 +750,6 @@
   async function getAddressRawForApi(){
     const raw = getWalletRawLS();
     if (!raw) return null;
-    // на всякий случай нормализуем (если кто-то руками записал не RAW)
     try{ return await toRaw(raw); }catch{ return raw; }
   }
 
@@ -791,7 +796,7 @@
 
   window.addEventListener("wallet_changed", async () => {
     await syncWalletUI();
-    await bindWalletOnServer();   // ✅ вот это критически важно
+    await bindWalletOnServer();   // ✅ важно для Telegram
     await refreshBalance();
   });
 
@@ -801,7 +806,7 @@
       await window.__tonUI.openModal();
       return;
     }
-    showPopup("TON", "TonConnect не загрузился. Проверь tonconnect-manifest.json");
+    showPopup("TON", "TonConnect не загрузился или manifest не доступен на текущем домене.");
   });
 
   // Disconnect
@@ -1077,7 +1082,6 @@
     const rel = normalize(pointerWorld - a - startOffset);
     return Math.floor(rel / step);
   }
-  function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
 
   function drawFishIcon(x,y,scale,fill){
     ctx.save();
@@ -1289,25 +1293,13 @@
     const sec = sectors[winnerIndex];
     if (!sec) return;
 
-    if (sec.kind === "leaf1" || sec.kind === "leaf2"){
-      const stake = totals.get(sec.kind) || 0;
-      if (stake > 0){
-        const pay = stake * 2;
-        await adjustBalance(+pay);
-        showPopup("Выигрыш", `Выпало ${sec.kind.toUpperCase()}! +${pay} TON`);
-      }
-      return;
-    }
+    const stake = totals.get(sec.kind) || 0;
+    if (stake <= 0) return;
 
-    if (sec.kind === "lilblues" || sec.kind === "bigoranges" || sec.kind === "hugered"){
-      const stake = totals.get(sec.kind) || 0;
-      if (stake > 0){
-        const pay = stake * 1;
-        await adjustBalance(+pay);
-        showPopup("Выигрыш", `Выпало ${sec.label}! +${pay} TON`);
-      }
-      return;
-    }
+    // Пример: листы х2, рыбы x1 (оставил как было)
+    const pay = (sec.kind === "leaf1" || sec.kind === "leaf2") ? stake * 2 : stake * 1;
+    await adjustBalance(+pay);
+    showPopup("Выигрыш", `Выпало ${sec.label || sec.kind.toUpperCase()}! +${pay} TON`);
   }
 
   const TWO_PI = Math.PI * 2;
