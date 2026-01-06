@@ -8,7 +8,7 @@
   <!-- Telegram WebApp -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- TonConnect UI (как в твоей вчерашней версии) -->
+  <!-- TonConnect UI -->
   <script src="https://unpkg.com/@tonconnect/ui@2.3.0/dist/tonconnect-ui.min.js"></script>
 
   <style>
@@ -387,11 +387,37 @@
     }
     .row2{ display:flex; gap:10px; margin-top:12px; }
     .row2 .sheetAction{ flex:1 1 0; justify-content:center; }
+
+    /* ✅ CONFETTI (coriandoli) */
+    .confettiLayer{
+      position:fixed;
+      inset:0;
+      pointer-events:none;
+      z-index:50;
+      overflow:hidden;
+    }
+    .confettiPiece{
+      position:absolute;
+      top:-12vh;
+      width:10px;
+      height:16px;
+      border-radius:2px;
+      opacity:.95;
+      transform: translate3d(0,0,0) rotate(0deg);
+      animation-name: confettiFall;
+      animation-timing-function: cubic-bezier(.14,.84,.25,1);
+      animation-fill-mode: forwards;
+    }
+    @keyframes confettiFall{
+      0%   { transform: translate3d(0,-15vh,0) rotate(0deg); }
+      100% { transform: translate3d(var(--dx, 0px), 115vh, 0) rotate(var(--rot, 720deg)); }
+    }
   </style>
 </head>
 
 <body>
   <div class="snow" id="snow"></div>
+  <div class="confettiLayer" id="confetti"></div>
 
   <div class="topRight">
     <div class="balancePill" id="balancePill" title="Баланс">
@@ -551,6 +577,46 @@
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
   // -------------------------------------------------
+  // ✅ CONFETTI
+  // -------------------------------------------------
+  const confettiLayer = document.getElementById("confetti");
+  function burstConfetti(colors){
+    const count = 90;
+    const W = window.innerWidth || 360;
+    for (let i=0;i<count;i++){
+      const p = document.createElement("div");
+      p.className = "confettiPiece";
+      const left = Math.random() * 100;
+      const sizeW = 6 + Math.random()*10;
+      const sizeH = 8 + Math.random()*14;
+
+      p.style.left = left + "vw";
+      p.style.width = sizeW + "px";
+      p.style.height = sizeH + "px";
+      p.style.background = colors[(Math.random()*colors.length)|0];
+
+      const dx = (Math.random() - 0.5) * Math.min(420, W*0.8);
+      const rot = (360 + Math.random()*1080) * (Math.random() < 0.5 ? -1 : 1);
+      const dur = 1200 + Math.random()*1500;
+
+      p.style.setProperty("--dx", dx + "px");
+      p.style.setProperty("--rot", rot + "deg");
+      p.style.animationDuration = dur + "ms";
+      p.style.animationDelay = (Math.random()*120) + "ms";
+
+      confettiLayer.appendChild(p);
+      setTimeout(() => p.remove(), dur + 250);
+    }
+  }
+  function celebrateFish(kind){
+    // kind: lilblues / bigoranges / hugered
+    if (kind === "lilblues") burstConfetti(["#60a5fa","#93c5fd","#dbeafe","#ffffff"]);
+    else if (kind === "bigoranges") burstConfetti(["#fb923c","#fdba74","#ffedd5","#ffffff"]);
+    else if (kind === "hugered") burstConfetti(["#fb7185","#fecdd3","#ffe4e6","#ffffff"]);
+    else burstConfetti(["#ffffff","#dbeafe","#ffedd5","#ffe4e6"]);
+  }
+
+  // -------------------------------------------------
   // ✅ Address utils (RAW everywhere + conversion)
   // -------------------------------------------------
   let __tonCore = null;
@@ -605,7 +671,7 @@
   }
 
   // -------------------------------------------------
-  // ✅ TonConnect init (главный фикс манифеста)
+  // ✅ TonConnect init (manifest fix + return url)
   // -------------------------------------------------
   (function initTonConnect(){
     try{
@@ -617,15 +683,11 @@
       }
 
       const TonConnectUI = window.TON_CONNECT_UI.TonConnectUI;
-
-      // ✅ КРИТИЧНО: манифест берём с ТЕКУЩЕГО ORIGIN (как в твоей вчерашней версии)
       const manifestUrl = location.origin + "/tonconnect-manifest.json";
 
       const tonUI = new TonConnectUI({
         manifestUrl,
         actionsConfiguration: {
-          // ✅ ОБЯЗАТЕЛЬНО: поставь своего бота
-          // пример: "https://t.me/icefishing_bot?startapp=1"
           twaReturnUrl: "https://t.me/ICE_FISHING_ICE_BOT?startapp=1"
         }
       });
@@ -666,33 +728,24 @@
     if (!raw) return;
 
     const initData = tg?.initData || "";
-    if (!initData){
-      // если открыто не в Telegram — просто пропускаем
-      return;
-    }
+    if (!initData) return;
 
     try{
       const r = await fetch("/api/bind_wallet", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({
-          initData,
-          walletAddress: raw
-        })
+        body: JSON.stringify({ initData, walletAddress: raw })
       });
 
       const j = await r.json().catch(()=>({}));
-      if (!r.ok){
-        console.log("bind_wallet failed", r.status, j);
-        return;
-      }
+      if (!r.ok) console.log("bind_wallet failed", r.status, j);
     }catch(e){
       console.log("bind_wallet error", e);
     }
   }
 
   // -------------------------------------------------
-  // ✅ BOC payload comment (фикс “Invalid magic”)
+  // ✅ BOC payload comment (fix “Invalid magic”)
   // -------------------------------------------------
   function bytesToBase64(bytes){
     let bin = "";
@@ -796,7 +849,7 @@
 
   window.addEventListener("wallet_changed", async () => {
     await syncWalletUI();
-    await bindWalletOnServer();   // ✅ важно для Telegram
+    await bindWalletOnServer();
     await refreshBalance();
   });
 
@@ -826,7 +879,7 @@
     depositModal.classList.add("open");
   });
 
-  // Deposit confirm
+  // Deposit confirm (✅ без “Отправляю... Проверка...”)
   document.getElementById("depositConfirm").addEventListener("click", async () => {
     const raw = await getAddressRawForApi();
     if (!raw){ showPopup("TON", "Сначала привяжи кошелёк."); return; }
@@ -840,7 +893,7 @@
       return;
     }
 
-    // ✅ создаём intent
+    // create intent
     const r = await fetch("/api/deposit_intent", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
@@ -855,12 +908,6 @@
     const intent = await r.json();
 
     try{
-      const exact = (typeof intent.amountTonExact === "number")
-        ? intent.amountTonExact
-        : (Number(intent.amountNano) / 1e9);
-
-      showPopup("TON", `Отправляю ${exact} TON.\nПроверка через 45 секунд…`);
-
       await window.__tonUI.sendTransaction({
         validUntil: Math.floor(Date.now()/1000) + 300,
         messages:[{
@@ -872,9 +919,10 @@
 
       depositModal.classList.remove("open");
 
+      // ✅ начинаем подтверждение тихо, без уведомлений
       setTimeout(() => {
         waitAndCredit(intent.intentId);
-      }, 45_000);
+      }, 12_000);
 
     }catch(e){
       console.log("sendTransaction error", e);
@@ -882,38 +930,51 @@
     }
   });
 
-  async function waitAndCredit(intentId){
-    const raw = await getAddressRawForApi();
-    if (!raw){
-      showPopup("TON", "Сначала подключи кошелёк.");
-      return;
-    }
-
-    for (let i=0;i<45;i++){ // ~90 секунд
+  // ✅ confirm helper: POST -> если backend отвечает {"error":"method"} попробуем GET fallback
+  async function confirmDepositTry(intentId, addressRaw){
+    // 1) POST
+    try{
       const r = await fetch("/api/confirm_deposit", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ intentId, address: raw })
+        body: JSON.stringify({ intentId, address: addressRaw })
       });
+      const j = await r.json().catch(()=>({}));
+      if (j && j.error === "method") throw new Error("method_get_needed");
+      return { ok: r.ok, json: j, status: r.status };
+    }catch(e){
+      // 2) GET fallback
+      const url = `/api/confirm_deposit?intentId=${encodeURIComponent(intentId)}&address=${encodeURIComponent(addressRaw)}`;
+      const r2 = await fetch(url, { cache:"no-store" });
+      const j2 = await r2.json().catch(()=>({}));
+      return { ok: r2.ok, json: j2, status: r2.status };
+    }
+  }
 
-      if (r.ok){
-        const j = await r.json().catch(()=>({}));
-        if (j.status === "credited"){
-          await refreshBalance();
-          setTimeout(refreshBalance, 300);
-          showPopup("TON", `Баланс пополнен: +${j.creditedTon} TON`);
-          return;
-        }
-        if (j.status === "wait" && j.retryAfterMs){
-          await sleep(Math.min(2000, Number(j.retryAfterMs)));
-          continue;
-        }
+  async function waitAndCredit(intentId){
+    const raw = await getAddressRawForApi();
+    if (!raw) return;
+
+    // до ~2 минут
+    for (let i=0;i<60;i++){
+      const { ok, json } = await confirmDepositTry(intentId, raw);
+
+      if (ok && json?.status === "credited"){
+        await refreshBalance();
+        setTimeout(refreshBalance, 300);
+        showPopup("TON", `Баланс пополнен: +${json.creditedTon} TON`);
+        return;
+      }
+
+      if (ok && json?.status === "wait" && json.retryAfterMs){
+        await sleep(Math.min(2000, Number(json.retryAfterMs)));
+        continue;
       }
 
       await sleep(2000);
     }
 
-    showPopup("TON", "Не удалось подтвердить депозит. Попробуй позже.");
+    showPopup("TON", "Депозит пока не подтвердился. Попробуй чуть позже.");
   }
 
   document.getElementById("actionWithdraw").addEventListener("click", () => {
@@ -1257,7 +1318,7 @@
   const hudMain = document.getElementById("hudMain");
   const hudSub  = document.getElementById("hudSub");
   function setHUDCountdown(endAt){
-    if (spinning) return;
+    if (spinning) return; // ✅ пока крутится — никаких цифр
     const leftMs = endAt - serverTimeNow();
     const sec = Math.max(0, Math.ceil(leftMs / 1000));
     hudMain.textContent = String(sec);
@@ -1296,15 +1357,15 @@
     const stake = totals.get(sec.kind) || 0;
     if (stake <= 0) return;
 
-    // Пример: листы х2, рыбы x1 (оставил как было)
     const pay = (sec.kind === "leaf1" || sec.kind === "leaf2") ? stake * 2 : stake * 1;
     await adjustBalance(+pay);
     showPopup("Выигрыш", `Выпало ${sec.label || sec.kind.toUpperCase()}! +${pay} TON`);
   }
 
+  // ✅ SPIN SETTINGS: сильный старт + плавная остановка ~8.5s
   const TWO_PI = Math.PI * 2;
-  const SPIN_TURNS = 10;
-  const SPIN_MS = 2600;
+  const SPIN_TURNS = 22;      // сильнее
+  const SPIN_MS = 8500;       // 8.5 секунд
 
   function getDesiredModForWinner(winnerIdx){
     const pointerWorld = -Math.PI/2;
@@ -1316,6 +1377,11 @@
     const base = angle - SPIN_TURNS * TWO_PI;
     const k = Math.floor((base - desiredMod) / TWO_PI);
     return desiredMod + k * TWO_PI;
+  }
+
+  // ✅ easing: очень быстрый старт + длинный хвост
+  function easeOutExpo(t){
+    return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
   }
 
   async function spinToWinner(winnerIndex, roundId){
@@ -1333,7 +1399,7 @@
     await new Promise(resolve=>{
       function frame(now){
         const t = Math.min(1, (now - t0) / SPIN_MS);
-        const k = 1 - Math.pow(1-t, 3);
+        const k = easeOutExpo(t);
         angle = start + (end - start) * k;
         drawWheel(indexAtPointer(angle));
         if (t < 1) requestAnimationFrame(frame);
@@ -1344,6 +1410,10 @@
 
     spinning = false;
     drawWheel(null);
+
+    // ✅ конфетти на рыбу
+    const sec = sectors[winnerIndex];
+    if (sec?.icon === "fish") celebrateFish(sec.kind);
 
     try{ await payout(winnerIndex); }catch{}
     clearAllBetsUI();
