@@ -81,7 +81,7 @@
       text-shadow: 0 6px 18px rgba(0,0,0,.12);
     }
     .hudText small{
-      display:block; font-weight:900; opacity:.75;
+      display:block; font-weight:900; opacity:.0; /* скрыто */
       letter-spacing:.2px; margin-top:3px; font-size:11px;
     }
 
@@ -134,14 +134,14 @@
     }
     canvas{ width:100%; height:100%; border-radius:50%; display:block; }
 
-    /* ✅ TOP RED POINTER (12h), shorter, no transparent part, no sharp tip */
+    /* ✅ pointer: ONLY RED ROD */
     .pointer{
       position:absolute;
       left:50%;
-      top:-14px;
+      top:-10px;
       transform: translateX(-50%);
-      width:120px;
-      height:60px;
+      width:90px;
+      height:56px;
       pointer-events:none;
       z-index:10;
       filter: drop-shadow(0 12px 12px rgba(0,0,0,.22));
@@ -149,27 +149,15 @@
     .pointerRod{
       position:absolute;
       left:50%;
-      top:12px;
-      width:8px;
-      height:42px;
+      top:10px;
+      width:7px;
+      height:44px;
       transform: translateX(-50%) rotate(0deg) skewX(0deg) scaleY(1);
       transform-origin: 50% 0%;
       border-radius:999px;
       background: linear-gradient(180deg, #ff4d4d, #c81d25);
       border:1px solid rgba(0,0,0,.18);
-      box-shadow: inset 0 2px 0 rgba(255,255,255,.18);
-    }
-    .pointerTip{
-      position:absolute;
-      left:50%;
-      top:52px;
-      width:16px;
-      height:10px;
-      transform: translateX(-50%);
-      border-radius:999px;
-      background: rgba(200, 29, 37, .96);
-      border:1px solid rgba(0,0,0,.16);
-      box-shadow: 0 10px 14px rgba(0,0,0,.14);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,.16);
     }
 
     /* bottom UI */
@@ -428,7 +416,6 @@
 
     <div class="pointer" aria-hidden="true">
       <div class="pointerRod" id="pointerRod"></div>
-      <div class="pointerTip" id="pointerTip"></div>
     </div>
   </div>
 
@@ -960,7 +947,7 @@
     btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
 
-  /* ========= WHEEL SYNC (MOST IMPORTANT) ========= */
+  /* ========= WHEEL SYNC ========= */
 
   const N = 53;
   const step = (Math.PI*2)/N;
@@ -1021,7 +1008,6 @@
     return ((a%t)+t)%t;
   }
 
-  /* pointer TOP = -PI/2 */
   const pointerWorld = -Math.PI/2;
 
   function indexAtPointer(angle){
@@ -1096,6 +1082,7 @@
     ctx.restore();
   }
 
+  // ✅ darker separators (dots)
   function drawOrnaments(angle){
     ctx.save();
     ctx.translate(cx,cy);
@@ -1108,13 +1095,13 @@
       const y = Math.sin(a) * r;
 
       ctx.beginPath();
-      ctx.fillStyle = "rgba(255,255,255,0.58)";
-      ctx.arc(x,y, 3.1, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      ctx.arc(x,y, 3.2, 0, Math.PI*2);
       ctx.fill();
 
       ctx.beginPath();
-      ctx.fillStyle = "rgba(0,0,0,0.12)";
-      ctx.arc(x+0.8,y+0.8, 2.1, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.arc(x-0.9,y-0.9, 1.8, 0, Math.PI*2);
       ctx.fill();
     }
     ctx.restore();
@@ -1224,13 +1211,14 @@
     return await r.json();
   }
 
-  /* ========= SYNCHRONIZED PHASE =========
-     We compute wheel angle purely from time and current state.
-  */
+  /* ========= SYNCHRONIZED PHASE (fixed logic) ========= */
 
-  // Spin should last 8.6s and finish exactly at endAt
+  // Spin duration fixed (visual), but HUD doesn't show it.
   const SPIN_MS = 8600;
   const SPIN_TURNS = 22;
+
+  // ✅ The "between rounds" countdown starts AFTER spin finished + result is in history.
+  // That means: next spin should start at (endAt + 15000), not immediately.
   const POST_DELAY_MS = 15000;
 
   function easeOutQuint(t){ return 1 - Math.pow(1-t, 5); }
@@ -1242,29 +1230,32 @@
 
   function buildTargetAngleFromStart(startAngle, winnerIdx){
     const desiredMod = desiredAngleForWinner(winnerIdx);
-    // make target = desiredMod - K*2pi such that it's <= startAngle - turns*2pi (strictly "forward")
     const base = startAngle - SPIN_TURNS * Math.PI * 2;
     const k = Math.floor((base - desiredMod) / (Math.PI*2));
     return desiredMod + k * (Math.PI*2);
   }
 
-  // Current rendered angle
+  // current angle
   let renderAngle = 0;
+  // smoothing to remove micro-jitters from timeOffset updates
+  const SMOOTH = 0.18;
 
-  // Latest server state snapshot
+  // latest server state
   let S = null;
 
-  // Derived per-round anchors
+  // derived anchors
   let anchorRoundId = null;
-  let anchorStartAngle = 0;   // angle at spinStartAt
-  let anchorTargetAngle = 0;  // angle at endAt
+  let anchorStartAngle = 0;
+  let anchorTargetAngle = 0;
   let anchorWinner = 0;
-  let anchorSpinStartAt = 0;
-  let anchorEndAt = 0;
+
+  // IMPORTANT: next spin start = endAt + POST_DELAY_MS
+  let spinStartAt = 0;
+  let endAt = 0;
+  let nextSpinAt = 0;
 
   // pointer flex
   const pointerRod = document.getElementById("pointerRod");
-  const pointerTip = document.getElementById("pointerTip");
   let lastRAFTime = 0;
   let lastRAFAngle = 0;
   let flex = 0;
@@ -1277,18 +1268,16 @@
     }
     const dt = Math.max(1, now - lastRAFTime);
     const da = renderAngle - lastRAFAngle;
-    const omega = Math.abs(da) / dt; // rad/ms
+    const omega = Math.abs(da) / dt;
 
-    const target = Math.min(1, omega * 120);
+    const target = Math.min(1, omega * 115);
     flex += (target - flex) * 0.18;
 
-    // slight bend (top pointer -> negative)
-    const rot = -(flex * 10);
-    const skew = -(flex * 8);
-    const squash = 1 - flex * 0.08;
+    const rot = -(flex * 9);
+    const skew = -(flex * 7);
+    const squash = 1 - flex * 0.07;
 
     pointerRod.style.transform = `translateX(-50%) rotate(${rot}deg) skewX(${skew}deg) scaleY(${squash})`;
-    pointerTip.style.transform = `translateX(-50%) translateY(${flex * 1.6}px)`;
 
     lastRAFTime = now;
     lastRAFAngle = renderAngle;
@@ -1298,36 +1287,37 @@
     S = state;
     timeOffset = (state.serverNow || Date.now()) - Date.now();
 
-    // update history strictly from server
     const curRoundId = state?.round?.roundId;
     const listAll = (state.history || []).slice().sort((a,b)=>a.roundId-b.roundId);
     const finished = (typeof curRoundId === "number") ? listAll.filter(x => x.roundId < curRoundId) : listAll;
 
+    // server-only history
     history.length = 0;
     for (const item of finished.slice(-HISTORY_MAX)) history.push(item.winnerIndex);
     renderHistory();
 
     const rid = state.round.roundId;
     const winner = state.round.winnerIndex;
-    const endAt = state.round.endAt;
-    const spinStartAt = endAt - SPIN_MS;
 
-    // If round changed, recompute anchors.
-    // Anchor start angle = final angle of previous round (from server history), so late joiners are synced.
-    if (anchorRoundId !== rid || anchorWinner !== winner || anchorEndAt !== endAt){
+    // backend endAt is spin end
+    endAt = state.round.endAt;
+    nextSpinAt = endAt + POST_DELAY_MS;
+    // spin starts 8.6s before endAt
+    spinStartAt = endAt - SPIN_MS;
+
+    // recompute anchors only when round changes (or winner changed)
+    if (anchorRoundId !== rid || anchorWinner !== winner || anchorRoundId === null){
       anchorRoundId = rid;
       anchorWinner = winner;
-      anchorEndAt = endAt;
-      anchorSpinStartAt = spinStartAt;
 
       const lastFinished = finished.length ? finished[finished.length-1] : null;
       const prevWinnerIdx = lastFinished ? lastFinished.winnerIndex : null;
 
-      // previous final angle
+      // start angle should be exact "final" of previous winner so everyone matches
       if (typeof prevWinnerIdx === "number"){
         anchorStartAngle = desiredAngleForWinner(prevWinnerIdx);
       } else {
-        // if no history yet, keep current renderAngle as start to avoid jump
+        // if no history, keep current
         anchorStartAngle = renderAngle;
       }
 
@@ -1335,57 +1325,56 @@
     }
   }
 
-  // HUD: only countdown number
+  // HUD: during spin = hidden, after spin = 15..0
   const hudMain = document.getElementById("hudMain");
   const hudSub  = document.getElementById("hudSub");
 
   function setHUD(){
-    if (!S) { hudMain.textContent = "0"; hudSub.textContent = ""; return; }
+    if (!S){ hudMain.textContent = "0"; hudSub.textContent=""; return; }
 
     const now = serverTimeNow();
-    const spinStartAt = anchorSpinStartAt;
-    const endAt = anchorEndAt;
-    const postEnd = endAt + POST_DELAY_MS;
 
-    let sec = 0;
-    if (now < spinStartAt){
-      // countdown to spin start
-      sec = Math.max(0, Math.ceil((spinStartAt - now) / 1000));
-    } else if (now >= spinStartAt && now <= endAt){
-      // show remaining seconds until spin end (still countdown)
-      sec = Math.max(0, Math.ceil((endAt - now) / 1000));
-    } else if (now > endAt && now < postEnd){
-      // 15 sec delay after end
-      sec = Math.max(0, Math.ceil((postEnd - now) / 1000));
-    } else {
-      // after post delay, show countdown to next spinStartAt based on current S (will update from server)
-      sec = Math.max(0, Math.ceil((anchorSpinStartAt - now) / 1000));
+    if (now >= spinStartAt && now <= endAt){
+      // ✅ during spin show nothing
+      hudMain.textContent = "";
+      return;
     }
 
-    hudMain.textContent = String(sec);
-    hudSub.textContent = ""; // никаких надписей
+    if (now > endAt && now < nextSpinAt){
+      // ✅ post delay 15s (start exactly after end)
+      const left = Math.max(0, Math.ceil((nextSpinAt - now)/1000));
+      hudMain.textContent = String(left);
+      return;
+    }
+
+    // before spin: show countdown to spin start (but NOT showing 8 sec; it’s just pre-spin)
+    if (now < spinStartAt){
+      const left = Math.max(0, Math.ceil((spinStartAt - now)/1000));
+      hudMain.textContent = String(left);
+      return;
+    }
+
+    // after delay if state still same — keep 0 until next state arrives
+    hudMain.textContent = "0";
   }
 
-  // Determine renderAngle based on phase (purely time-based)
-  function computeAngleAt(now){
+  // compute "true angle" from time
+  function computeTrueAngle(now){
     if (!S) return renderAngle;
 
-    const t0 = anchorSpinStartAt;
-    const t1 = anchorEndAt;
+    if (now < spinStartAt) return anchorStartAngle;
+    if (now >= endAt) return anchorTargetAngle;
 
-    if (now < t0) return anchorStartAngle;
-    if (now >= t1) return anchorTargetAngle;
-
-    const t = (now - t0) / (t1 - t0);
+    const t = (now - spinStartAt) / (endAt - spinStartAt);
     const k = easeOutQuint(Math.min(1, Math.max(0, t)));
     return anchorStartAngle + (anchorTargetAngle - anchorStartAngle) * k;
   }
 
-  // Confetti once per round end (client-side, safe)
+  // celebrate once per round end
   let celebratedRoundId = null;
   function maybeCelebrate(now){
     if (!S) return;
-    if (now < anchorEndAt) return;
+    if (now < endAt) return;
     if (celebratedRoundId === anchorRoundId) return;
     celebratedRoundId = anchorRoundId;
 
@@ -1393,22 +1382,23 @@
     if (sec?.icon === "fish") celebrateFish(sec.kind);
   }
 
-  // Render loop (always running)
+  // Render loop (smoothed)
   function raf(now){
-    const serverNow = serverTimeNow();
-    renderAngle = computeAngleAt(serverNow);
+    const sn = serverTimeNow();
+    const trueAngle = computeTrueAngle(sn);
+
+    // ✅ smooth to remove timeOffset jitter
+    renderAngle = renderAngle + (trueAngle - renderAngle) * SMOOTH;
 
     const hi = indexAtPointer(renderAngle);
     drawWheel(renderAngle, hi);
-
     updatePointerFlex(now);
     setHUD();
-    maybeCelebrate(serverNow);
+    maybeCelebrate(sn);
 
     requestAnimationFrame(raf);
   }
 
-  // state poll (does NOT restart spin; only updates anchors)
   async function syncLoop(){
     try{
       const st = await fetchState();
@@ -1416,7 +1406,7 @@
     }catch{}
   }
 
-  /* init UI */
+  /* init */
   (async function initAll(){
     await syncWalletUI();
     if (getWalletRawLS()) await bindWalletOnServer();
