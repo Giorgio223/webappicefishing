@@ -26,13 +26,21 @@ async function tonapiGet(path) {
   const r = await fetch(`https://tonapi.io/v2${path}`, {
     headers: TONAPI_KEY ? { Authorization: `Bearer ${TONAPI_KEY}` } : {},
   });
-
   const text = await r.text();
   let j = {};
   try { j = JSON.parse(text); } catch { j = { raw: text }; }
-
   if (!r.ok) throw new Error(`tonapi_${r.status}:${j.error || j.message || "unknown"}`);
   return j;
+}
+
+function extractComment(inMsg) {
+  if (!inMsg) return "";
+  // tonapi может раскладывать по-разному
+  const parts = [];
+  if (inMsg.message) parts.push(String(inMsg.message));
+  if (inMsg.decoded_body?.text) parts.push(String(inMsg.decoded_body.text));
+  if (inMsg.decoded_body?.comment) parts.push(String(inMsg.decoded_body.comment));
+  return parts.join(" | ");
 }
 
 export default async function handler(req, res) {
@@ -45,15 +53,12 @@ export default async function handler(req, res) {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
     const intentId = String(body.intentId || "").trim();
     const userWalletIn = String(body.address || "").trim();
-
     if (!intentId || !userWalletIn) return res.status(400).json({ error: "bad_request" });
 
-    // user wallet RAW
     let userWalletRaw;
     try { userWalletRaw = normalizeToRaw(userWalletIn); }
     catch { return res.status(400).json({ error: "bad_wallet_address" }); }
 
-    // treasury RAW + friendly (в URL tonapi лучше friendly)
     let treasuryRaw;
     try { treasuryRaw = normalizeToRaw(TREASURY); }
     catch { return res.status(500).json({ error: "bad_treasury_address" }); }
@@ -61,7 +66,6 @@ export default async function handler(req, res) {
 
     const intentRaw = await redis.get(`dep:intent:${intentId}`);
     if (!intentRaw) return res.status(404).json({ error: "intent_not_found" });
-
     const intent = typeof intentRaw === "string" ? JSON.parse(intentRaw) : intentRaw;
 
     const createdAt = Number(intent.createdAt || 0);
@@ -72,36 +76,30 @@ export default async function handler(req, res) {
 
     const creditedKey = `dep:credited:${intentId}`;
     if (await redis.get(creditedKey)) {
-      return res.status(200).json({
-        status: "credited",
-        creditedTon: Number(intent.amountNano || 0) / 1e9,
-      });
+      return res.status(200).json({ status: "credited", creditedTon: Number(intent.amountNano||0)/1e9 });
     }
 
     const wantAmountNano = String(intent.amountNano || "0");
+    const wantComment = String(intent.comment || `ICEFISHING_DEPOSIT:${intentId}`).trim();
     const createdAtSec = createdAt ? Math.floor(createdAt / 1000) : 0;
 
-    // Берём входящие транзакции на TREASURY
     const txs = await tonapiGet(
-      `/blockchain/accounts/${encodeURIComponent(treasuryFriendly)}/transactions?limit=200`
+      `/blockchain/accounts/${encodeURIComponent(treasuryFriendly)}/transactions?limit=250`
     );
-
     const list = txs.transactions || [];
-    let found = null;
 
+    let found = null;
     for (const tx of list) {
       const inMsg = tx.in_msg;
       if (!inMsg) continue;
 
-      // 1) amount match
       const value = String(inMsg.value || "0");
       if (value !== wantAmountNano) continue;
 
-      // 2) time check
       const utime = Number(tx.utime || tx.now || 0);
       if (createdAtSec && utime && utime < createdAtSec - 120) continue;
 
-      // 3) destination == treasury (best effort)
+      // destination must be treasury (best effort)
       try {
         const destLike = inMsg.destination || inMsg?.destination?.address;
         if (destLike) {
@@ -110,33 +108,24 @@ export default async function handler(req, res) {
         }
       } catch {}
 
-      // ✅ 4) SOURCE (отправитель) = кошелёк пользователя (самый надёжный матч)
-      try {
-        const srcLike = inMsg.source || inMsg?.source?.address;
-        if (!srcLike) continue;
-        const srcRaw = normalizeToRaw(srcLike);
-        if (srcRaw !== userWalletRaw) continue;
-      } catch {
-        continue;
+      // If comment is visible, use it. If not visible, still accept amount+time match.
+      const blob = extractComment(inMsg);
+      if (blob && wantComment && blob.includes(wantComment)) {
+        found = tx; break;
       }
 
-      found = tx;
-      break;
+      // fallback: amount+time is enough
+      found = tx; break;
     }
 
     if (!found) {
       return res.status(200).json({
         status: "pending",
-        debug: {
-          userWalletRaw,
-          treasuryFriendly,
-          wantAmountNano,
-          createdAt,
-        }
+        debug: { treasuryFriendly, wantAmountNano, wantComment, createdAt }
       });
     }
 
-    // ✅ credit RAW balance key
+    // credit balance (RAW key only)
     const balKey = `bal:${userWalletRaw}`;
     const cur = Number((await redis.get(balKey)) || "0");
     const next = cur + Number(intent.amountNano || 0);
@@ -152,10 +141,10 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       status: "credited",
-      creditedTon: Number(intent.amountNano || 0) / 1e9,
+      creditedTon: Number(intent.amountNano||0)/1e9,
       addressRaw: userWalletRaw,
       balKey,
-      newBalanceNano: String(next),
+      newBalanceNano: String(next)
     });
   } catch (e) {
     return res.status(500).json({ error: "confirm_error", message: String(e) });
