@@ -6,10 +6,15 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-const PERIOD_MS = 10000;
+// ✅ требования под твой фронт/логику
+const SPIN_MS = 8600;          // длительность вращения
+const POST_DELAY_MS = 15000;   // 15 сек после окончания спина
+const ROUND_MS = SPIN_MS + POST_DELAY_MS; // полный цикл раунда
+
 const N = 53;
 const HISTORY_MAX = 18;
 
+// защита от сильного сдвига истории (в раундах)
 const MAX_ROUND_DRIFT = 60 * 60;
 
 function winnerForRound(roundId) {
@@ -23,7 +28,10 @@ async function rebuildHistory(lastCompletedRoundId) {
   const from = Math.max(0, lastCompletedRoundId - (HISTORY_MAX - 1));
   await redis.del("wheel:history");
   for (let r = from; r <= lastCompletedRoundId; r++) {
-    await redis.rpush("wheel:history", JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) }));
+    await redis.rpush(
+      "wheel:history",
+      JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) })
+    );
   }
   await redis.set("wheel:lastRoundId", lastCompletedRoundId);
 }
@@ -49,7 +57,10 @@ async function ensureHistoryUpTo(lastCompletedRoundId) {
 
   if (last < lastCompletedRoundId) {
     for (let r = last + 1; r <= lastCompletedRoundId; r++) {
-      await redis.rpush("wheel:history", JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) }));
+      await redis.rpush(
+        "wheel:history",
+        JSON.stringify({ roundId: r, winnerIndex: winnerForRound(r) })
+      );
     }
     await redis.ltrim("wheel:history", -HISTORY_MAX, -1);
     await redis.set("wheel:lastRoundId", lastCompletedRoundId);
@@ -64,9 +75,16 @@ export default async function handler(req, res) {
     res.setHeader("Content-Type", "application/json");
 
     const now = Date.now();
-    const roundId = Math.floor(now / PERIOD_MS);
-    const startAt = roundId * PERIOD_MS;
-    const endAt = startAt + PERIOD_MS;
+
+    // ✅ roundId теперь по ROUND_MS (8.6s spin + 15s pause)
+    const roundId = Math.floor(now / ROUND_MS);
+    const roundStartAt = roundId * ROUND_MS;
+
+    // ✅ время спина и паузы внутри раунда
+    const spinStartAt = roundStartAt;          // начало вращения
+    const endAt = roundStartAt + SPIN_MS;      // конец вращения
+    const nextRoundAt = roundStartAt + ROUND_MS; // начало следующего раунда
+
     const lastCompletedRoundId = Math.max(0, roundId - 1);
 
     await ensureHistoryUpTo(lastCompletedRoundId);
@@ -80,11 +98,17 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       serverNow: now,
-      periodMs: PERIOD_MS,
+
+      // полезно для клиента (если захочешь)
+      roundMs: ROUND_MS,
+      spinMs: SPIN_MS,
+      postDelayMs: POST_DELAY_MS,
+
       round: {
         roundId,
-        startAt,
-        endAt,
+        startAt: spinStartAt,  // ✅ теперь startAt = начало спина
+        endAt,                 // ✅ конец спина
+        nextRoundAt,           // ✅ когда начнётся следующий раунд
         winnerIndex: winnerForRound(roundId),
       },
       history,
