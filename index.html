@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IceFishing Wheel</title>
+  <title>IceFishing</title>
 
   <!-- Telegram WebApp -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -18,7 +18,7 @@
       --red:#e11d48;
       --orange:#fb923c;
       --blue:#0b2a8f;
-      --ring1:#0b1220;
+      --ring:#0b1220;
     }
     *{box-sizing:border-box}
     body{
@@ -27,12 +27,13 @@
       font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
       overflow:hidden;
       background:
-        radial-gradient(900px 600px at 25% 15%, rgba(255,255,255,.25), rgba(255,255,255,0) 60%),
-        radial-gradient(1200px 900px at 70% 35%, rgba(255,255,255,.18), rgba(255,255,255,0) 65%),
+        radial-gradient(900px 600px at 25% 15%, rgba(255,255,255,.22), rgba(255,255,255,0) 60%),
+        radial-gradient(1200px 900px at 70% 35%, rgba(255,255,255,.15), rgba(255,255,255,0) 65%),
         url("bg.png") center/cover no-repeat fixed;
     }
 
-    .snow { pointer-events:none; position:fixed; inset:0; z-index:2; overflow:hidden; }
+    /* snow */
+    .snow{pointer-events:none; position:fixed; inset:0; z-index:2; overflow:hidden;}
     .snow span{
       position:absolute; top:-10vh;
       width:6px; height:6px;
@@ -41,8 +42,26 @@
       opacity:.85;
       animation: fall linear infinite;
     }
-    @keyframes fall{ from { transform: translateY(-10vh);} to { transform: translateY(110vh);} }
+    @keyframes fall{ from{transform:translateY(-10vh)} to{transform:translateY(110vh)} }
 
+    /* confetti */
+    .confettiLayer{position:fixed; inset:0; pointer-events:none; z-index:50; overflow:hidden;}
+    .confettiPiece{
+      position:absolute; top:-12vh;
+      width:10px; height:16px;
+      border-radius:2px;
+      opacity:.95;
+      transform: translate3d(0,0,0) rotate(0deg);
+      animation-name: confettiFall;
+      animation-timing-function: cubic-bezier(.14,.84,.25,1);
+      animation-fill-mode: forwards;
+    }
+    @keyframes confettiFall{
+      0%   { transform: translate3d(0,-15vh,0) rotate(0deg); }
+      100% { transform: translate3d(var(--dx, 0px), 115vh, 0) rotate(var(--rot, 720deg)); }
+    }
+
+    /* HUD */
     .leftHUD{
       position:fixed; left:12px; top:14px;
       display:flex; align-items:center; gap:10px;
@@ -70,26 +89,12 @@
       letter-spacing:.2px; margin-top:3px; font-size:11px;
     }
 
-    .topRight{
+    /* top right */
+    .hudRight{
       position:fixed; right:12px; top:14px; z-index:6;
       display:flex; align-items:center; gap:10px;
     }
-    .tonBtn{
-      display:flex; align-items:center; gap:10px;
-      padding:10px 12px; border-radius:14px;
-      border:1px solid rgba(0,0,0,.12);
-      background: rgba(255,255,255,.60);
-      box-shadow: 0 12px 26px rgba(0,0,0,.16);
-      backdrop-filter: blur(6px);
-      cursor:pointer; user-select:none;
-      -webkit-tap-highlight-color: transparent;
-      text-decoration:none; color:#0b1220;
-      font-weight:950;
-    }
-    .tonBtn img{ width:22px; height:22px; display:block; border-radius:6px; }
-    .tonBtn:active{ transform: translateY(1px); }
-
-    .balancePill{
+    .pill{
       display:flex; align-items:center; gap:8px;
       padding:10px 12px; border-radius:14px;
       border:1px solid rgba(0,0,0,.12);
@@ -102,9 +107,25 @@
       min-width:120px;
       justify-content:center;
     }
-    .balancePill img{ width:18px; height:18px; border-radius:6px; }
-    .balancePill small{ font-weight:900; opacity:.75; margin-left:4px; }
+    .pill img{ width:18px; height:18px; border-radius:6px; }
+    .pill small{ font-weight:900; opacity:.75; margin-left:4px; }
 
+    .tonBtn{
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px; border-radius:14px;
+      border:1px solid rgba(0,0,0,.12);
+      background: rgba(255,255,255,.60);
+      box-shadow: 0 12px 26px rgba(0,0,0,.16);
+      backdrop-filter: blur(6px);
+      cursor:pointer; user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      text-decoration:none; color:#0b1220;
+      font-weight:950;
+    }
+    .tonBtn img{ width:22px; height:22px; border-radius:6px; }
+    .tonBtn:active{ transform: translateY(1px); }
+
+    /* wheel */
     .wheelWrap{
       position:fixed;
       left:50%;
@@ -115,19 +136,76 @@
       z-index:3;
       filter: drop-shadow(0 26px 44px rgba(0,0,0,.30));
     }
-    canvas{ width:100%; height:100%; border-radius:50%; }
+    canvas{ width:100%; height:100%; border-radius:50%; display:block; }
 
-    .pointer{
-      position:absolute; top:-8px; left:50%;
-      transform:translateX(-50%);
-      width:0;height:0;
-      border-left:16px solid transparent;
-      border-right:16px solid transparent;
-      border-top:30px solid var(--ring1);
-      filter: drop-shadow(0 10px 10px rgba(0,0,0,.25));
+    /* ✅ NEW FLEX RED “SKID” POINTER (внизу, трогает точки) */
+    .skidPointer{
+      position:absolute;
+      left:50%;
+      bottom:-10px; /* чуть ниже круга */
+      transform: translateX(-50%);
+      width:160px;
+      height:90px;
       pointer-events:none;
+      z-index:10;
+      filter: drop-shadow(0 14px 14px rgba(0,0,0,.25));
+    }
+    .skidMount{
+      position:absolute;
+      left:50%;
+      bottom:6px;
+      transform:translateX(-50%);
+      width:66px; height:34px;
+      border-radius:14px;
+      background: linear-gradient(180deg, rgba(255,255,255,.86), rgba(220,235,250,.72));
+      border:1px solid rgba(0,0,0,.12);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.55);
+    }
+    .skidMount:before{
+      content:"";
+      position:absolute;
+      left:10px; right:10px; top:10px; height:10px;
+      border-radius:999px;
+      background: rgba(0,0,0,.08);
     }
 
+    /* “пружинка/гибка” делаем через transform у палочки */
+    .skidRod{
+      position:absolute;
+      left:50%;
+      bottom:22px;
+      width:10px;
+      height:66px;
+      transform: translateX(-50%) rotate(0deg) skewX(0deg);
+      transform-origin: 50% 100%;
+      border-radius:999px;
+      background: linear-gradient(180deg, #ff4d4d, #c81d25);
+      border:1px solid rgba(0,0,0,.18);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,.25);
+    }
+    /* наконечник который “скользит” */
+    .skidTip{
+      position:absolute;
+      left:50%;
+      bottom:78px;
+      width:24px;
+      height:16px;
+      transform: translateX(-50%);
+      border-radius:999px;
+      background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(230,240,255,.65));
+      border:1px solid rgba(0,0,0,.12);
+      box-shadow: 0 10px 16px rgba(0,0,0,.14);
+    }
+    .skidTip:after{
+      content:"";
+      position:absolute;
+      inset:4px 6px;
+      border-radius:999px;
+      background: rgba(0,0,0,.10);
+      opacity:.55;
+    }
+
+    /* bottom UI */
     .bottomUI{
       position:fixed;
       left:50%;
@@ -139,7 +217,6 @@
       gap:10px;
       z-index:4;
     }
-
     .historyBar{
       width:100%;
       display:flex; gap:6px;
@@ -208,10 +285,8 @@
       font-size:16px;
       border:1px solid rgba(0,0,0,.10);
     }
-
     .c-leaf1{ background: color-mix(in srgb, var(--leaf1) 86%, white 14%); color:#0b1220; }
     .c-leaf2{ background: color-mix(in srgb, var(--leaf2) 86%, white 14%); color:#fff; }
-
     .c-blue { background: color-mix(in srgb, var(--blue) 74%, white 26%); color:#fff; }
     .c-orange{ background: color-mix(in srgb, var(--orange) 74%, white 26%); color:#1b1b1b; }
     .c-red { background: color-mix(in srgb, var(--red) 74%, white 26%); color:#fff; }
@@ -232,27 +307,16 @@
       color:#0b1220;
     }
 
-    .betRow{
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      gap:10px;
-    }
+    .betRow{ display:flex; justify-content:center; align-items:center; gap:10px; }
     .undoBtn{
-      width:44px;
-      height:44px;
-      border-radius:999px;
+      width:44px; height:44px; border-radius:999px;
       border:1px solid rgba(0,0,0,.12);
       background: rgba(255,255,255,.60);
       box-shadow: 0 12px 26px rgba(0,0,0,.16);
       backdrop-filter: blur(6px);
-      cursor:pointer;
-      user-select:none;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-weight:950;
-      color:#0b1220;
+      cursor:pointer; user-select:none;
+      display:flex; align-items:center; justify-content:center;
+      font-weight:950; color:#0b1220;
       -webkit-tap-highlight-color: transparent;
     }
     .undoBtn[disabled]{ opacity:.55; cursor:not-allowed; }
@@ -276,7 +340,6 @@
     }
     .betHint{ font-size:11px; font-weight:900; opacity:.75; }
     .chev{ opacity:.75; font-weight:950; }
-
     .betMenu{
       position:absolute;
       left:50%;
@@ -309,9 +372,9 @@
     .c05{ background:#f59e0b; color:#1b1b1b; }
     .c10{ background:#ef4444; color:#fff; }
 
+    /* modal */
     .modalOverlay{
-      position:fixed;
-      inset:0;
+      position:fixed; inset:0;
       background: rgba(0,0,0,.45);
       backdrop-filter: blur(4px);
       display:none;
@@ -330,19 +393,12 @@
       padding-bottom:18px;
     }
     .sheetHeader{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      padding:6px 6px 12px 6px;
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; padding:6px 6px 12px 6px;
     }
     .sheetTitle{
-      font-weight:950;
-      color:#0b1220;
-      letter-spacing:.2px;
-      display:flex;
-      align-items:center;
-      gap:10px;
+      font-weight:950; color:#0b1220; letter-spacing:.2px;
+      display:flex; align-items:center; gap:10px;
     }
     .sheetTitle img{ width:22px; height:22px; border-radius:6px; }
     .closeBtn{
@@ -353,65 +409,27 @@
       cursor:pointer;
       font-weight:950;
     }
-    .sheetBtns{
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-      padding:0 6px;
-    }
+    .sheetBtns{ display:flex; flex-direction:column; gap:10px; padding:0 6px; }
     .sheetAction{
-      height:54px;
-      border-radius:16px;
+      height:54px; border-radius:16px;
       border:1px solid rgba(0,0,0,.12);
       background: rgba(245,250,255,.92);
       box-shadow: 0 12px 26px rgba(0,0,0,.10);
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
+      display:flex; align-items:center; justify-content:space-between;
       padding:0 14px;
-      cursor:pointer;
-      user-select:none;
-      font-weight:950;
-      color:#0b1220;
+      cursor:pointer; user-select:none;
+      font-weight:950; color:#0b1220;
     }
-
     .depositInput{
-      width:100%;
-      height:52px;
+      width:100%; height:52px;
       border-radius:14px;
       border:1px solid rgba(0,0,0,.12);
       padding:0 14px;
-      font-size:18px;
-      font-weight:900;
+      font-size:18px; font-weight:900;
       outline:none;
     }
     .row2{ display:flex; gap:10px; margin-top:12px; }
     .row2 .sheetAction{ flex:1 1 0; justify-content:center; }
-
-    /* ✅ CONFETTI (coriandoli) */
-    .confettiLayer{
-      position:fixed;
-      inset:0;
-      pointer-events:none;
-      z-index:50;
-      overflow:hidden;
-    }
-    .confettiPiece{
-      position:absolute;
-      top:-12vh;
-      width:10px;
-      height:16px;
-      border-radius:2px;
-      opacity:.95;
-      transform: translate3d(0,0,0) rotate(0deg);
-      animation-name: confettiFall;
-      animation-timing-function: cubic-bezier(.14,.84,.25,1);
-      animation-fill-mode: forwards;
-    }
-    @keyframes confettiFall{
-      0%   { transform: translate3d(0,-15vh,0) rotate(0deg); }
-      100% { transform: translate3d(var(--dx, 0px), 115vh, 0) rotate(var(--rot, 720deg)); }
-    }
   </style>
 </head>
 
@@ -419,12 +437,11 @@
   <div class="snow" id="snow"></div>
   <div class="confettiLayer" id="confetti"></div>
 
-  <div class="topRight">
-    <div class="balancePill" id="balancePill" title="Баланс">
+  <div class="hudRight">
+    <div class="pill" id="balancePill" title="Баланс">
       <img src="ton.png" alt="TON" />
       <span id="balanceValue">0</span><small>TON</small>
     </div>
-
     <a class="tonBtn" href="javascript:void(0)" id="tonConnectBtn">
       <img src="ton.png" alt="TON" />
       <span id="tonBtnText">TON connect</span>
@@ -440,8 +457,14 @@
   </div>
 
   <div class="wheelWrap">
-    <div class="pointer"></div>
     <canvas id="wheel" width="900" height="900"></canvas>
+
+    <!-- ✅ flexible red skid pointer (внизу) -->
+    <div class="skidPointer" aria-hidden="true">
+      <div class="skidMount"></div>
+      <div class="skidRod" id="skidRod"></div>
+      <div class="skidTip" id="skidTip"></div>
+    </div>
   </div>
 
   <div class="bottomUI">
@@ -526,7 +549,7 @@
     </div>
   </div>
 
-  <!-- DEPOSIT INPUT MODAL -->
+  <!-- DEPOSIT INPUT -->
   <div class="modalOverlay" id="depositModal">
     <div class="sheet">
       <div class="sheetHeader">
@@ -547,7 +570,7 @@
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
 
-  // snow
+  /* snow */
   (function initSnow(){
     const box = document.getElementById("snow");
     const flakes = 26;
@@ -576,9 +599,7 @@
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-  // -------------------------------------------------
-  // ✅ CONFETTI
-  // -------------------------------------------------
+  /* confetti */
   const confettiLayer = document.getElementById("confetti");
   function burstConfetti(colors){
     const count = 90;
@@ -609,144 +630,30 @@
     }
   }
   function celebrateFish(kind){
-    // kind: lilblues / bigoranges / hugered
     if (kind === "lilblues") burstConfetti(["#60a5fa","#93c5fd","#dbeafe","#ffffff"]);
     else if (kind === "bigoranges") burstConfetti(["#fb923c","#fdba74","#ffedd5","#ffffff"]);
     else if (kind === "hugered") burstConfetti(["#fb7185","#fecdd3","#ffe4e6","#ffffff"]);
     else burstConfetti(["#ffffff","#dbeafe","#ffedd5","#ffe4e6"]);
   }
 
-  // -------------------------------------------------
-  // ✅ Address utils (RAW everywhere + conversion)
-  // -------------------------------------------------
+  /* @ton/core via ESM for address parsing + comment BOC */
   let __tonCore = null;
   async function tonCore(){
     if (!__tonCore) __tonCore = await import("https://esm.sh/@ton/core@0.58.0");
     return __tonCore;
   }
-
   async function toRaw(addr){
     const a = String(addr || "").trim();
     if (!a) return null;
     const { Address } = await tonCore();
     return Address.parse(a).toRawString(); // "0:..."
   }
-
   async function toFriendly(addr){
     const a = String(addr || "").trim();
     if (!a) return null;
     const { Address } = await tonCore();
     return Address.parse(a).toString({ urlSafe:true, bounceable:false, testOnly:false });
   }
-
-  function shortAddr(a){ return a ? (a.slice(0,6) + "..." + a.slice(-6)) : ""; }
-
-  // ✅ always store RAW in localStorage
-  function getWalletRawLS(){
-    const ls = (localStorage.getItem("walletRaw") || "").trim();
-    return ls || null;
-  }
-
-  async function setWalletFromTonConnect(wallet){
-    const addr = (wallet?.account?.address || "").trim(); // может быть EQ/UQ/0:
-    if (!addr){
-      localStorage.removeItem("walletRaw");
-      localStorage.removeItem("walletFriendly");
-      return;
-    }
-    const raw = await toRaw(addr);
-    localStorage.setItem("walletRaw", raw);
-    const fr = await toFriendly(raw);
-    if (fr) localStorage.setItem("walletFriendly", fr);
-  }
-
-  async function getWalletFriendlyLS(){
-    const cached = (localStorage.getItem("walletFriendly") || "").trim();
-    if (cached) return cached;
-    const raw = getWalletRawLS();
-    if (!raw) return null;
-    const fr = await toFriendly(raw);
-    if (fr) localStorage.setItem("walletFriendly", fr);
-    return fr;
-  }
-
-  // -------------------------------------------------
-  // ✅ TonConnect init (manifest fix + return url)
-  // -------------------------------------------------
-  (function initTonConnect(){
-    try{
-      if (!window.TON_CONNECT_UI || !window.TON_CONNECT_UI.TonConnectUI) {
-        window.__tonUI = null;
-        window.__wallet = null;
-        console.log("TonConnect UI not loaded");
-        return;
-      }
-
-      const TonConnectUI = window.TON_CONNECT_UI.TonConnectUI;
-      const manifestUrl = location.origin + "/tonconnect-manifest.json";
-
-      const tonUI = new TonConnectUI({
-        manifestUrl,
-        actionsConfiguration: {
-          twaReturnUrl: "https://t.me/ICE_FISHING_ICE_BOT?startapp=1"
-        }
-      });
-
-      window.__tonUI = tonUI;
-      window.__wallet = null;
-
-      tonUI.onStatusChange(async (wallet) => {
-        window.__wallet = wallet || null;
-
-        try{
-          await setWalletFromTonConnect(wallet);
-        }catch(e){
-          console.log("wallet parse error", e);
-          localStorage.removeItem("walletRaw");
-          localStorage.removeItem("walletFriendly");
-        }
-
-        window.dispatchEvent(new Event("wallet_changed"));
-      });
-
-      tonUI.connectionRestored
-        .then(() => window.dispatchEvent(new Event("wallet_changed")))
-        .catch(() => {});
-
-    }catch(e){
-      console.log("TonConnect init error", e);
-      window.__tonUI = null;
-      window.__wallet = null;
-    }
-  })();
-
-  // -------------------------------------------------
-  // ✅ Telegram bind wallet (server stores RAW)
-  // -------------------------------------------------
-  async function bindWalletOnServer(){
-    const raw = getWalletRawLS();
-    if (!raw) return;
-
-    const initData = tg?.initData || "";
-    if (!initData) return;
-
-    try{
-      const r = await fetch("/api/bind_wallet", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ initData, walletAddress: raw })
-      });
-
-      const j = await r.json().catch(()=>({}));
-      if (!r.ok) console.log("bind_wallet failed", r.status, j);
-    }catch(e){
-      console.log("bind_wallet error", e);
-    }
-  }
-
-  // -------------------------------------------------
-  // ✅ BOC payload comment (fix “Invalid magic”)
-  // -------------------------------------------------
   function bytesToBase64(bytes){
     let bin = "";
     for (const b of bytes) bin += String.fromCharCode(b);
@@ -759,10 +666,85 @@
     return bytesToBase64(boc);
   }
 
-  // UI refs
+  function shortAddr(a){ return a ? (a.slice(0,6) + "..." + a.slice(-6)) : ""; }
+
+  function getWalletRawLS(){
+    const ls = (localStorage.getItem("walletRaw") || "").trim();
+    return ls || null;
+  }
+  async function setWalletFromTonConnect(wallet){
+    const addr = (wallet?.account?.address || "").trim();
+    if (!addr){
+      localStorage.removeItem("walletRaw");
+      localStorage.removeItem("walletFriendly");
+      return;
+    }
+    const raw = await toRaw(addr);
+    localStorage.setItem("walletRaw", raw);
+    const fr = await toFriendly(raw);
+    if (fr) localStorage.setItem("walletFriendly", fr);
+  }
+  async function getWalletFriendlyLS(){
+    const cached = (localStorage.getItem("walletFriendly") || "").trim();
+    if (cached) return cached;
+    const raw = getWalletRawLS();
+    if (!raw) return null;
+    const fr = await toFriendly(raw);
+    if (fr) localStorage.setItem("walletFriendly", fr);
+    return fr;
+  }
+
+  /* TonConnect init */
+  (function initTonConnect(){
+    try{
+      if (!window.TON_CONNECT_UI || !window.TON_CONNECT_UI.TonConnectUI) {
+        window.__tonUI = null;
+        window.__wallet = null;
+        return;
+      }
+      const TonConnectUI = window.TON_CONNECT_UI.TonConnectUI;
+      const tonUI = new TonConnectUI({
+        manifestUrl: location.origin + "/tonconnect-manifest.json",
+        actionsConfiguration: { twaReturnUrl: "https://t.me/ICE_FISHING_ICE_BOT?startapp=1" }
+      });
+      window.__tonUI = tonUI;
+      window.__wallet = null;
+
+      tonUI.onStatusChange(async (wallet) => {
+        window.__wallet = wallet || null;
+        try{ await setWalletFromTonConnect(wallet); }catch{
+          localStorage.removeItem("walletRaw");
+          localStorage.removeItem("walletFriendly");
+        }
+        window.dispatchEvent(new Event("wallet_changed"));
+      });
+
+      tonUI.connectionRestored
+        .then(() => window.dispatchEvent(new Event("wallet_changed")))
+        .catch(() => {});
+    }catch{
+      window.__tonUI = null;
+      window.__wallet = null;
+    }
+  })();
+
+  async function bindWalletOnServer(){
+    const raw = getWalletRawLS();
+    if (!raw) return;
+    const initData = tg?.initData || "";
+    if (!initData) return;
+    try{
+      await fetch("/api/bind_wallet", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ initData, walletAddress: raw })
+      });
+    }catch{}
+  }
+
+  /* UI refs */
   const tonModal = document.getElementById("tonModal");
   const depositModal = document.getElementById("depositModal");
-
   document.getElementById("tonConnectBtn").addEventListener("click", () => tonModal.classList.add("open"));
   document.getElementById("tonClose").addEventListener("click", () => tonModal.classList.remove("open"));
   tonModal.addEventListener("click", (e) => { if (e.target === tonModal) tonModal.classList.remove("open"); });
@@ -774,7 +756,6 @@
   const balanceValue = document.getElementById("balanceValue");
   const tonBtnText = document.getElementById("tonBtnText");
   const walletStatus = document.getElementById("walletStatus");
-
   let balanceTonCache = 0;
 
   function setBalanceTonUI(v){
@@ -782,7 +763,6 @@
     const s = (Math.round(balanceTonCache * 1000) / 1000).toString();
     balanceValue.textContent = s;
   }
-
   async function syncWalletUI(){
     const raw = getWalletRawLS();
     if (!raw){
@@ -797,9 +777,6 @@
     walletStatus.textContent = shortAddr(show);
   }
 
-  // -------------------------------------------------
-  // ✅ API helpers (ALWAYS send RAW to backend)
-  // -------------------------------------------------
   async function getAddressRawForApi(){
     const raw = getWalletRawLS();
     if (!raw) return null;
@@ -809,18 +786,14 @@
   async function refreshBalance(){
     const raw = await getAddressRawForApi();
     if (!raw){ setBalanceTonUI(0); return 0; }
-
     const r = await fetch(`/api/balance?address=${encodeURIComponent(raw)}`, { cache:"no-store" });
     if (!r.ok) return balanceTonCache;
-
     const j = await r.json().catch(()=>({}));
-
     let ton = 0;
     if (typeof j.balanceTon === "number") ton = j.balanceTon;
     else if (typeof j.ton === "number") ton = j.ton;
     else if (typeof j.nano === "number") ton = j.nano / 1e9;
     else if (typeof j.nano === "string" && j.nano) ton = Number(j.nano) / 1e9;
-
     if (!Number.isFinite(ton)) ton = 0;
     setBalanceTonUI(ton);
     return ton;
@@ -829,7 +802,6 @@
   async function adjustBalance(deltaTon){
     const raw = await getAddressRawForApi();
     if (!raw) throw new Error("no_wallet");
-
     const deltaNano = Math.trunc(Number(deltaTon) * 1e9);
 
     const r = await fetch("/api/balance_adjust", {
@@ -837,7 +809,6 @@
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ address: raw, deltaNano })
     });
-
     const j = await r.json().catch(()=>({}));
     if (!r.ok) throw new Error(j.error || "balance_adjust_failed");
 
@@ -853,7 +824,6 @@
     await refreshBalance();
   });
 
-  // Bind (TonConnect modal)
   document.getElementById("actionBind").addEventListener("click", async () => {
     if (window.__tonUI?.openModal){
       await window.__tonUI.openModal();
@@ -862,7 +832,6 @@
     showPopup("TON", "TonConnect не загрузился или manifest не доступен на текущем домене.");
   });
 
-  // Disconnect
   document.getElementById("actionDisconnect").addEventListener("click", async () => {
     try{ await window.__tonUI?.disconnect?.(); }catch{}
     localStorage.removeItem("walletRaw");
@@ -872,14 +841,47 @@
     showPopup("TON", "Кошелёк отвязан.");
   });
 
-  // Deposit open
   document.getElementById("actionDeposit").addEventListener("click", async () => {
-    const raw = getWalletRawLS();
-    if (!raw){ showPopup("TON", "Сначала привяжи кошелёк."); return; }
+    if (!getWalletRawLS()){ showPopup("TON", "Сначала привяжи кошелёк."); return; }
     depositModal.classList.add("open");
   });
 
-  // Deposit confirm (✅ без “Отправляю... Проверка...”)
+  async function confirmDepositTry(intentId, addressRaw){
+    // POST first
+    try{
+      const r = await fetch("/api/confirm_deposit", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ intentId, address: addressRaw })
+      });
+      const j = await r.json().catch(()=>({}));
+      if (j && j.error === "method") throw new Error("method_get_needed");
+      return { ok: r.ok, json: j };
+    }catch{
+      const url = `/api/confirm_deposit?intentId=${encodeURIComponent(intentId)}&address=${encodeURIComponent(addressRaw)}`;
+      const r2 = await fetch(url, { cache:"no-store" });
+      const j2 = await r2.json().catch(()=>({}));
+      return { ok: r2.ok, json: j2 };
+    }
+  }
+
+  async function waitAndCredit(intentId){
+    const raw = await getAddressRawForApi();
+    if (!raw) return;
+    // тихая проверка
+    for (let i=0;i<80;i++){
+      const { ok, json } = await confirmDepositTry(intentId, raw);
+      if (ok && json?.status === "credited"){
+        await refreshBalance();
+        setTimeout(refreshBalance, 350);
+        showPopup("TON", `Баланс пополнен: +${json.creditedTon} TON`);
+        return;
+      }
+      await sleep(1500);
+    }
+    showPopup("TON", "Депозит пока не подтвердился. Попробуй чуть позже.");
+  }
+
   document.getElementById("depositConfirm").addEventListener("click", async () => {
     const raw = await getAddressRawForApi();
     if (!raw){ showPopup("TON", "Сначала привяжи кошелёк."); return; }
@@ -887,21 +889,14 @@
     const amountTon = Number(document.getElementById("depositAmount").value);
     if (!amountTon || amountTon <= 0){ showPopup("Ошибка", "Введите сумму TON"); return; }
     if (amountTon < 0.1){ showPopup("Ошибка", "Минимум 0.1 TON"); return; }
+    if (!window.__tonUI?.sendTransaction){ showPopup("TON", "TonConnect UI не готов."); return; }
 
-    if (!window.__tonUI?.sendTransaction){
-      showPopup("TON", "TonConnect UI не готов.");
-      return;
-    }
-
-    // create intent
     const r = await fetch("/api/deposit_intent", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ amountTon })
     });
     if (!r.ok){
-      const t = await r.text().catch(()=> "");
-      console.log("deposit_intent failed", r.status, t);
       showPopup("TON", "Сервер депозита не настроен.");
       return;
     }
@@ -918,70 +913,19 @@
       });
 
       depositModal.classList.remove("open");
-
-      // ✅ начинаем подтверждение тихо, без уведомлений
-      setTimeout(() => {
-        waitAndCredit(intent.intentId);
-      }, 12_000);
-
+      // без “проверка 45 секунд” — просто тихо проверяем
+      setTimeout(() => waitAndCredit(intent.intentId), 9000);
     }catch(e){
       console.log("sendTransaction error", e);
       showPopup("TON", "Транзакция отменена или ошибка кошелька.");
     }
   });
 
-  // ✅ confirm helper: POST -> если backend отвечает {"error":"method"} попробуем GET fallback
-  async function confirmDepositTry(intentId, addressRaw){
-    // 1) POST
-    try{
-      const r = await fetch("/api/confirm_deposit", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ intentId, address: addressRaw })
-      });
-      const j = await r.json().catch(()=>({}));
-      if (j && j.error === "method") throw new Error("method_get_needed");
-      return { ok: r.ok, json: j, status: r.status };
-    }catch(e){
-      // 2) GET fallback
-      const url = `/api/confirm_deposit?intentId=${encodeURIComponent(intentId)}&address=${encodeURIComponent(addressRaw)}`;
-      const r2 = await fetch(url, { cache:"no-store" });
-      const j2 = await r2.json().catch(()=>({}));
-      return { ok: r2.ok, json: j2, status: r2.status };
-    }
-  }
-
-  async function waitAndCredit(intentId){
-    const raw = await getAddressRawForApi();
-    if (!raw) return;
-
-    // до ~2 минут
-    for (let i=0;i<60;i++){
-      const { ok, json } = await confirmDepositTry(intentId, raw);
-
-      if (ok && json?.status === "credited"){
-        await refreshBalance();
-        setTimeout(refreshBalance, 300);
-        showPopup("TON", `Баланс пополнен: +${json.creditedTon} TON`);
-        return;
-      }
-
-      if (ok && json?.status === "wait" && json.retryAfterMs){
-        await sleep(Math.min(2000, Number(json.retryAfterMs)));
-        continue;
-      }
-
-      await sleep(2000);
-    }
-
-    showPopup("TON", "Депозит пока не подтвердился. Попробуй чуть позже.");
-  }
-
   document.getElementById("actionWithdraw").addEventListener("click", () => {
     showPopup("TON", "Вывод добавим позже.");
   });
 
-  // ---- Bets / undo / balance rules ----
+  /* Bets / undo */
   let currentBet = 0.2;
   const betSelect = document.getElementById("betSelect");
   const betMenu = document.getElementById("betMenu");
@@ -1025,22 +969,15 @@
   }
 
   async function addBet(target, amountTon){
-    const raw = getWalletRawLS();
-    if (!raw){ showPopup("Ставки", "Сначала привяжи кошелёк."); return; }
-
+    if (!getWalletRawLS()){ showPopup("Ставки", "Сначала привяжи кошелёк."); return; }
     if (balanceTonCache + 1e-9 < amountTon){
       showPopup("Баланс", `Недостаточно средств. Нужно минимум ${fmt(amountTon)} TON`);
       return;
     }
-
-    try{
-      await adjustBalance(-amountTon);
-    }catch(e){
-      console.log(e);
+    try{ await adjustBalance(-amountTon); }catch{
       showPopup("Баланс", "Не удалось списать баланс.");
       return;
     }
-
     const prev = totals.get(target) || 0;
     const next = Math.round((prev + amountTon) * 10) / 10;
     totals.set(target, next);
@@ -1051,23 +988,18 @@
 
   async function undoLast(){
     if (actions.length === 0) return;
-
     const last = actions.pop();
     const prev = totals.get(last.target) || 0;
     const next = Math.round((prev - last.amountTon) * 10) / 10;
     if (next <= 0) totals.delete(last.target);
     else totals.set(last.target, next);
 
-    try{
-      await adjustBalance(+last.amountTon);
-    }catch(e){
-      console.log(e);
+    try{ await adjustBalance(+last.amountTon); }catch{
       actions.push(last);
       totals.set(last.target, prev);
       showPopup("Баланс", "Не удалось вернуть баланс.");
       return;
     }
-
     renderTotalOnButton(last.target);
     updateUndoState();
   }
@@ -1077,7 +1009,7 @@
     btn.addEventListener("click", (e) => { e.stopPropagation(); addBet(btn.dataset.target, currentBet); });
   });
 
-  // ---- Wheel + history ----
+  /* Wheel config */
   const N = 53;
   const step = (Math.PI*2)/N;
   const startOffset = -Math.PI/2;
@@ -1123,6 +1055,7 @@
     toggle++;
   }
 
+  /* Canvas */
   const canvas = document.getElementById("wheel");
   const ctx = canvas.getContext("2d");
   const W = canvas.width, H = canvas.height;
@@ -1138,12 +1071,16 @@
     const t = Math.PI*2;
     return ((a%t)+t)%t;
   }
+
+  /* ✅ pointer is at bottom (points up). bottomWorld = +PI/2 */
+  const pointerWorld = Math.PI/2;
+
   function indexAtPointer(a){
-    const pointerWorld = -Math.PI/2;
     const rel = normalize(pointerWorld - a - startOffset);
     return Math.floor(rel / step);
   }
 
+  /* icons */
   function drawFishIcon(x,y,scale,fill){
     ctx.save();
     ctx.translate(x,y);
@@ -1167,7 +1104,6 @@
     ctx.fill();
     ctx.restore();
   }
-
   function drawLeafIcon(x,y,scale,stroke){
     ctx.save();
     ctx.translate(x,y);
@@ -1192,7 +1128,6 @@
 
     ctx.restore();
   }
-
   function drawVerticalChars(text, x, y, fill){
     const t = (text || "").replace(/\s+/g," ").trim();
     ctx.save();
@@ -1201,21 +1136,48 @@
     ctx.font = "900 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-
     const lineH = 11;
     const maxLen = 10;
     const s = t.slice(0, maxLen);
     const totalH = (s.length-1)*lineH;
-
     for (let i=0;i<s.length;i++){
       ctx.fillText(s[i], 0, -totalH/2 + i*lineH);
     }
     ctx.restore();
   }
 
+  /* ✅ draw: add “узорчики/точки” между всеми 53 секциями по ободу */
+  function drawOrnaments(){
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(angle);
+
+    const r = outerR*0.93;
+    for (let i=0;i<N;i++){
+      const a = i*step + startOffset;
+
+      // маленькая “точка-узор”
+      const x = Math.cos(a) * r;
+      const y = Math.sin(a) * r;
+
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(255,255,255,0.58)";
+      ctx.arc(x,y, 3.2, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(0,0,0,0.12)";
+      ctx.arc(x+0.8,y+0.8, 2.2, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
   function drawWheel(highlightIdx=null){
     ctx.clearRect(0,0,W,H);
 
+    // ice base
     ctx.save();
     const ice = ctx.createRadialGradient(cx,cy,innerR, cx,cy,outerR*1.05);
     ice.addColorStop(0, "rgba(255,255,255,0.96)");
@@ -1227,6 +1189,7 @@
     ctx.fill();
     ctx.restore();
 
+    // rim
     ctx.save();
     const rimGrad = ctx.createRadialGradient(cx,cy,outerR*0.92, cx,cy,outerR*1.06);
     rimGrad.addColorStop(0, "rgba(18,27,47,0.95)");
@@ -1238,6 +1201,7 @@
     ctx.stroke();
     ctx.restore();
 
+    // sectors
     ctx.save();
     ctx.translate(cx,cy);
     ctx.rotate(angle);
@@ -1261,8 +1225,9 @@
         ctx.fill();
       }
 
-      ctx.strokeStyle = "rgba(255,255,255,0.20)";
-      ctx.lineWidth = 1.1;
+      // separators
+      ctx.strokeStyle = "rgba(255,255,255,0.22)";
+      ctx.lineWidth = 1.0;
       ctx.stroke();
 
       const mid = (a0+a1)/2;
@@ -1283,10 +1248,13 @@
 
       ctx.restore();
     }
-
     ctx.restore();
+
+    // ornaments on top
+    drawOrnaments();
   }
 
+  /* History */
   const historyBar = document.getElementById("historyBar");
   const history = [];
   const HISTORY_MAX = 18;
@@ -1301,6 +1269,7 @@
     }
   }
 
+  /* Server state sync */
   let timeOffset = 0;
   let scheduledForRoundId = null;
   let scheduledSpinTimer = null;
@@ -1308,7 +1277,6 @@
   let lastCommittedRoundId = null;
 
   function serverTimeNow(){ return Date.now() + timeOffset; }
-
   async function fetchState(){
     const r = await fetch("/api/state", { cache:"no-store" });
     if (!r.ok) throw new Error("api_state_error");
@@ -1317,8 +1285,9 @@
 
   const hudMain = document.getElementById("hudMain");
   const hudSub  = document.getElementById("hudSub");
+
   function setHUDCountdown(endAt){
-    if (spinning) return; // ✅ пока крутится — никаких цифр
+    if (spinning) return;
     const leftMs = endAt - serverTimeNow();
     const sec = Math.max(0, Math.ceil(leftMs / 1000));
     hudMain.textContent = String(sec);
@@ -1326,17 +1295,47 @@
   }
 
   function applyServerHistory(state){
-    const list = (state.history || []).slice().sort((a,b)=>a.roundId-b.roundId);
+    // ✅ history только завершенные раунды
+    const curRoundId = state?.round?.roundId;
+    const listAll = (state.history || []).slice().sort((a,b)=>a.roundId-b.roundId);
+    const list = (typeof curRoundId === "number")
+      ? listAll.filter(x => x.roundId < curRoundId)
+      : listAll;
+
     history.length = 0;
     for (const item of list.slice(-HISTORY_MAX)) history.push(item.winnerIndex);
     renderHistory();
     lastServerHistoryRoundId = list.length ? list[list.length-1].roundId : null;
   }
 
+  /* ✅ SPIN: быстрый старт + плавная остановка ~8.6s, без дерганий */
+  const TWO_PI = Math.PI * 2;
+  const SPIN_TURNS = 22;
+  const SPIN_MS = 8600;
+
+  function getDesiredModForWinner(winnerIdx){
+    const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
+    return normalize(pointerWorld - winnerCenter);
+  }
+  function buildStrongTarget(winnerIdx){
+    const desiredMod = getDesiredModForWinner(winnerIdx);
+    const base = angle - SPIN_TURNS * TWO_PI;
+    const k = Math.floor((base - desiredMod) / TWO_PI);
+    return desiredMod + k * TWO_PI;
+  }
+  function easeOutQuint(t){ return 1 - Math.pow(1-t, 5); }
+
   function scheduleSpinAtEnd(endAt, winnerIndex, roundId){
     if (scheduledSpinTimer) clearTimeout(scheduledSpinTimer);
-    const delay = Math.max(0, endAt - serverTimeNow());
-    scheduledSpinTimer = setTimeout(() => { spinToWinner(winnerIndex, roundId); }, delay);
+
+    // ✅ стартуем заранее, чтобы остановиться ровно в endAt
+    const startAt = endAt - SPIN_MS;
+    const delay = Math.max(0, startAt - serverTimeNow());
+
+    scheduledSpinTimer = setTimeout(() => {
+      spinToWinner(winnerIndex, roundId, endAt);
+    }, delay);
+
     scheduledForRoundId = roundId;
   }
 
@@ -1362,29 +1361,42 @@
     showPopup("Выигрыш", `Выпало ${sec.label || sec.kind.toUpperCase()}! +${pay} TON`);
   }
 
-  // ✅ SPIN SETTINGS: сильный старт + плавная остановка ~8.5s
-  const TWO_PI = Math.PI * 2;
-  const SPIN_TURNS = 22;      // сильнее
-  const SPIN_MS = 8500;       // 8.5 секунд
+  /* ✅ “гибка палочка”: делаем flex от скорости */
+  const skidRod = document.getElementById("skidRod");
+  const skidTip = document.getElementById("skidTip");
 
-  function getDesiredModForWinner(winnerIdx){
-    const pointerWorld = -Math.PI/2;
-    const winnerCenter = (winnerIdx + 0.5)*step + startOffset;
-    return normalize(pointerWorld - winnerCenter);
-  }
-  function buildStrongTarget(winnerIdx){
-    const desiredMod = getDesiredModForWinner(winnerIdx);
-    const base = angle - SPIN_TURNS * TWO_PI;
-    const k = Math.floor((base - desiredMod) / TWO_PI);
-    return desiredMod + k * TWO_PI;
+  let lastFrameAngle = 0;
+  let lastFrameTime = 0;
+  let rodFlex = 0; // 0..1
+  function updateSkidFlex(now){
+    if (!lastFrameTime){
+      lastFrameTime = now;
+      lastFrameAngle = angle;
+      return;
+    }
+    const dt = Math.max(1, now - lastFrameTime);
+    const da = angle - lastFrameAngle;
+    const omega = Math.abs(da) / dt; // rad per ms
+
+    // скорость -> flex
+    const target = Math.min(1, omega * 120); // tuned
+    // сглаживание (пружинка)
+    rodFlex += (target - rodFlex) * 0.18;
+
+    // flex влияет на наклон и “сгиб”
+    const rot = (rodFlex * 14);           // градусов
+    const skew = (rodFlex * 10);          // градусов
+    const squash = 1 - rodFlex * 0.10;    // чуть короче при сильном ударе
+
+    skidRod.style.transform = `translateX(-50%) rotate(${rot}deg) skewX(${skew}deg) scaleY(${squash})`;
+    // tip “подпрыгивает”
+    skidTip.style.transform = `translateX(-50%) translateY(${rodFlex * 3}px)`;
+
+    lastFrameTime = now;
+    lastFrameAngle = angle;
   }
 
-  // ✅ easing: очень быстрый старт + длинный хвост
-  function easeOutExpo(t){
-    return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
-  }
-
-  async function spinToWinner(winnerIndex, roundId){
+  async function spinToWinner(winnerIndex, roundId, endAt){
     if (spinning) return;
     spinning = true;
 
@@ -1399,9 +1411,13 @@
     await new Promise(resolve=>{
       function frame(now){
         const t = Math.min(1, (now - t0) / SPIN_MS);
-        const k = easeOutExpo(t);
+        const k = easeOutQuint(t);
         angle = start + (end - start) * k;
-        drawWheel(indexAtPointer(angle));
+
+        const hi = indexAtPointer(angle);
+        drawWheel(hi);
+        updateSkidFlex(now);
+
         if (t < 1) requestAnimationFrame(frame);
         else resolve();
       }
@@ -1411,7 +1427,7 @@
     spinning = false;
     drawWheel(null);
 
-    // ✅ конфетти на рыбу
+    // рыбы -> конфетти
     const sec = sectors[winnerIndex];
     if (sec?.icon === "fish") celebrateFish(sec.kind);
 
@@ -1419,8 +1435,8 @@
     clearAllBetsUI();
     await refreshBalance();
 
-    await sleep(2000);
-
+    // ✅ history только после завершения
+    await sleep(400);
     const serverDone = (lastServerHistoryRoundId !== null && roundId <= lastServerHistoryRoundId);
     const localDone  = (lastCommittedRoundId !== null && roundId <= lastCommittedRoundId);
     if (!serverDone && !localDone){
@@ -1429,12 +1445,18 @@
       renderHistory();
       lastCommittedRoundId = roundId;
     }
+
+    // ✅ ждём, чтобы новый раунд не “врывался” визуально
+    // (сервер всё равно начнёт новый раунд, но UI мы обновим в syncLoop после спина)
   }
 
   async function syncLoop(){
     try{
       const state = await fetchState();
       timeOffset = state.serverNow - Date.now();
+
+      // ✅ пока крутится — не обновляем countdown/history/schedule
+      if (spinning) return;
 
       const serverLast = (state.history && state.history.length)
         ? Math.max(...state.history.map(x => x.roundId))
@@ -1452,14 +1474,16 @@
     }catch{}
   }
 
-  // init
+  /* Init */
   (async function initAll(){
     await syncWalletUI();
     if (getWalletRawLS()) await bindWalletOnServer();
     await refreshBalance();
+
     drawWheel(null);
     renderHistory();
     updateUndoState();
+
     syncLoop();
     setInterval(syncLoop, 500);
     setInterval(refreshBalance, 5000);
