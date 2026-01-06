@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { Redis } from "@upstash/redis";
+import { Address } from "@ton/core";
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
@@ -29,6 +30,19 @@ function verifyInitData(initData) {
   return { ok: hmac === hash, params };
 }
 
+function normalizeToRaw(addressLike) {
+  // принимает EQ/UQ/0:... и приводит к RAW 0:...
+  return Address.parse(String(addressLike).trim()).toRawString();
+}
+
+function rawToFriendly(raw) {
+  return Address.parse(raw).toString({
+    urlSafe: true,
+    bounceable: false,
+    testOnly: false,
+  });
+}
+
 export default async function handler(req, res) {
   try {
     res.setHeader("Cache-Control", "no-store");
@@ -36,10 +50,10 @@ export default async function handler(req, res) {
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
     const initData = String(body.initData || "");
-    const walletAddress = String(body.walletAddress || "").trim();
+    const walletAddressIn = String(body.walletAddress || "").trim();
 
     if (!initData) return res.status(400).json({ error: "no_initData" });
-    if (!walletAddress) return res.status(400).json({ error: "no_wallet" });
+    if (!walletAddressIn) return res.status(400).json({ error: "no_wallet" });
 
     const v = verifyInitData(initData);
     if (!v.ok) return res.status(401).json({ error: "bad_initData" });
@@ -53,15 +67,34 @@ export default async function handler(req, res) {
 
     if (!tgId) return res.status(400).json({ error: "bad_user_id" });
 
-    // tgId -> wallet
-    await redis.set(`tg:wallet:${tgId}`, walletAddress);
+    // Нормализуем кошелёк
+    let walletRaw;
+    try {
+      walletRaw = normalizeToRaw(walletAddressIn);
+    } catch {
+      return res.status(400).json({ error: "bad_wallet_address" });
+    }
+
+    const walletFriendly = rawToFriendly(walletRaw);
+
+    // tgId -> RAW wallet
+    await redis.set(`tg:wallet:${tgId}`, walletRaw);
+
+    // Дополнительно сохраним friendly (иногда удобно отдавать на фронт)
+    await redis.set(`tg:wallet_friendly:${tgId}`, walletFriendly);
 
     // username -> tgId (если есть username)
     if (username) {
       await redis.set(`tg:username:${username}`, String(tgId));
     }
 
-    res.status(200).json({ ok: true, tgId, username, walletAddress });
+    res.status(200).json({
+      ok: true,
+      tgId,
+      username,
+      walletRaw,
+      walletFriendly,
+    });
   } catch (e) {
     res.status(500).json({ error: "bind_wallet_error", message: String(e) });
   }
