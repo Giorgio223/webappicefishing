@@ -381,6 +381,53 @@
     }
     .row2{ display:flex; gap:10px; margin-top:12px; }
     .row2 .sheetAction{ flex:1 1 0; justify-content:center; }
+
+    /* ===========================
+       FISHING OVERLAY (2D)
+       =========================== */
+    .fishOverlay{
+      position:fixed; inset:0;
+      z-index:9999;
+      opacity:0;
+      pointer-events:none;
+      transition: opacity .55s ease;
+    }
+    .fishOverlay.active{
+      opacity:1;
+      pointer-events:auto;
+    }
+    .fishStage{ position:absolute; inset:0; overflow:hidden; }
+    .fishBg{
+      position:absolute; inset:0;
+      background:url("assets/fishing/bg_lake.jpg") center/cover no-repeat;
+    }
+    .fishDim{
+      position:absolute; inset:0;
+      background: rgba(0,0,0,.10);
+    }
+    .fishSprite{
+      position:absolute;
+      left:58%;
+      top:62%;
+      width:min(200px, 44vw);
+      transform: translate(-50%,-50%) scale(0.2) rotate(-20deg);
+      opacity:0;
+      filter: drop-shadow(0 20px 20px rgba(0,0,0,.35));
+    }
+    .fishMult{
+      position:absolute;
+      left:58%;
+      top:62%;
+      transform: translate(-50%,-50%) scale(.6);
+      opacity:0;
+      font-size:clamp(30px, 7vw, 58px);
+      font-weight:1000;
+      color:#fff;
+      text-shadow:
+        0 4px 0 rgba(0,0,0,.6),
+        0 14px 30px rgba(0,0,0,.35);
+      -webkit-text-stroke:3px rgba(0,0,0,.4);
+    }
   </style>
 </head>
 
@@ -482,6 +529,16 @@
     </div>
   </div>
 
+  <!-- FISHING SCENE OVERLAY -->
+  <div id="fishingOverlay" class="fishOverlay">
+    <div class="fishStage">
+      <div class="fishBg"></div>
+      <div class="fishDim"></div>
+      <img id="fishSprite" class="fishSprite" src="" alt="fish">
+      <div id="fishMult" class="fishMult">x2</div>
+    </div>
+  </div>
+
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
@@ -539,6 +596,69 @@
     else if (kind === "bigoranges") burstConfetti(["#fb923c","#fdba74","#ffedd5","#ffffff"]);
     else if (kind === "hugered") burstConfetti(["#fb7185","#fecdd3","#ffe4e6","#ffffff"]);
     else burstConfetti(["#ffffff","#dbeafe","#ffedd5","#ffe4e6"]);
+  }
+
+  /* ===========================
+     FISHING SCENE (2D)
+     =========================== */
+  let fishingBusy = false;
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+  function fishAsset(kind){
+    if (kind === "lilblues") return "assets/fishing/fish_blue.png";
+    if (kind === "bigoranges") return "assets/fishing/fish_orange.png";
+    if (kind === "hugered") return "assets/fishing/fish_red.png";
+    return "";
+  }
+  function fishMultiplier(kind){
+    if (kind === "lilblues") return 2;
+    if (kind === "bigoranges") return 5;
+    if (kind === "hugered") return 10;
+    return 1;
+  }
+
+  async function playFishingScene(kind){
+    if (fishingBusy) return;
+    if (kind === "leaf") return;
+    fishingBusy = true;
+
+    const overlay = document.getElementById("fishingOverlay");
+    const fish = document.getElementById("fishSprite");
+    const mult = document.getElementById("fishMult");
+
+    fish.src = fishAsset(kind);
+    mult.textContent = "x" + fishMultiplier(kind);
+
+    // reset
+    fish.style.transition = "none";
+    mult.style.transition = "none";
+    fish.style.opacity = "0";
+    mult.style.opacity = "0";
+    fish.style.transform = "translate(-50%,-50%) scale(0.2) rotate(-20deg)";
+    mult.style.transform = "translate(-50%,-50%) scale(.6)";
+
+    overlay.classList.add("active");
+    await wait(60);
+
+    // "подсечка" — появление рыбы
+    await wait(550);
+
+    fish.style.transition = "transform 1.05s cubic-bezier(.15,.9,.25,1), opacity .25s";
+    fish.style.opacity = "1";
+    fish.style.transform = "translate(-50%,-50%) scale(1.0) rotate(8deg)";
+
+    await wait(850);
+
+    mult.style.transition = "transform .55s cubic-bezier(.2,1.25,.25,1), opacity .20s";
+    mult.style.opacity = "1";
+    mult.style.transform = "translate(-50%,-50%) scale(1.05)";
+
+    await wait(900);
+
+    overlay.classList.remove("active");
+    await wait(600);
+
+    fishingBusy = false;
   }
 
   /* ton core helpers */
@@ -1151,20 +1271,19 @@
     }
   }
 
-  /* ---- SERVER TIME (NO WOBBLE + SANITY) ---- */
-  let timeOffset = 0;
+  /* ===========================
+     SERVER TIME (FIXED: NO CATCH-UP)
+     =========================== */
   let syncedOnce = false;
-  let baseServerNow = Date.now();
-  let baseLocalNow = Date.now();
+  let syncServerNow = Date.now();
+  let syncLocalNow = Date.now();
   let lastServerNow = 0;
 
-  const OFFSET_SLEW = 0.22;
-
   function serverTimeNow(){
-    const local = Date.now();
-    let est = baseServerNow + (local - baseLocalNow) + timeOffset;
+    const est = syncServerNow + (Date.now() - syncLocalNow);
+    // монотонность (чтобы никогда не шло назад)
     if (syncedOnce){
-      if (est < lastServerNow) est = lastServerNow;
+      if (est < lastServerNow) return lastServerNow;
       lastServerNow = est;
     }
     return est;
@@ -1177,7 +1296,6 @@
   }
 
   /* ========= SYNCHRONIZED PHASE ========= */
-  // ОДИН ИСТОЧНИК ПРАВДЫ: state.round.startAt/endAt и state.round.winnerIndex
   const SPIN_MS = 8600;
   const POST_DELAY_MS = 15000;
   const SPIN_TURNS = 22;
@@ -1243,20 +1361,15 @@
   function applyState(state){
     S = state;
 
-    // time sync
-    const targetOffset = (state.serverNow || Date.now()) - Date.now();
-
+    // ✅ ЖЁСТКАЯ синхронизация времени: без догоняния
+    const srvNow = Number(state.serverNow || Date.now());
+    syncServerNow = srvNow;
+    syncLocalNow = Date.now();
     if (!syncedOnce){
       syncedOnce = true;
-      timeOffset = targetOffset;
-      baseServerNow = state.serverNow || Date.now();
-      baseLocalNow = Date.now();
-      lastServerNow = baseServerNow + timeOffset;
-    } else {
-      timeOffset = timeOffset + (targetOffset - timeOffset) * OFFSET_SLEW;
+      lastServerNow = srvNow;
     }
 
-    // sanity: если сервер вернул кривые значения — не ломаем анимацию
     const srvSpin = Number(state.spinMs || SPIN_MS);
     const srvDelay = Number(state.postDelayMs || POST_DELAY_MS);
 
@@ -1276,14 +1389,12 @@
       return;
     }
 
-    // если сервер вдруг вернул “endAt далеко”, мы ограничим по разумному диапазону
     const maxSpin = Math.max(4000, Math.min(12000, srvSpin));
     const maxDelay = Math.max(5000, Math.min(60000, srvDelay));
 
     spinStartAt = sStart;
     endAt = sEnd;
 
-    // если endAt слишком далеко от startAt, пересчитаем
     if ((endAt - spinStartAt) < 1000 || (endAt - spinStartAt) > 30000){
       endAt = spinStartAt + maxSpin;
     }
@@ -1314,7 +1425,7 @@
     const now = serverTimeNow();
 
     if (now >= spinStartAt && now <= endAt){
-      hudMain.textContent = ""; // во время спина не показываем
+      hudMain.textContent = "";
       return;
     }
 
@@ -1360,7 +1471,11 @@
     if (celebratedRoundId !== anchorRoundId){
       celebratedRoundId = anchorRoundId;
       const kind = winnerKindFromIndex(anchorWinner);
-      if (kind !== "leaf") celebrateFish(kind);
+      if (kind !== "leaf"){
+        celebrateFish(kind);
+        // ✅ сцена рыбы
+        playFishingScene(kind);
+      }
     }
 
     if (settledRoundId !== anchorRoundId){
@@ -1412,7 +1527,6 @@
 
     await syncLoop();
 
-    // polling
     setInterval(syncLoop, 1100);
     setInterval(refreshBalance, 5000);
     setInterval(resumeDepositsSilently, 12000);
@@ -1421,24 +1535,6 @@
     requestAnimationFrame(raf);
   })();
 </script>
-  <!-- FISHING SCENE OVERLAY -->
-<div id="fishingOverlay" style="
-  position:fixed;
-  inset:0;
-  background:url('assets/fishing/bg_lake.jpg') center/cover no-repeat;
-  z-index:9999;
-  display:none;
-">
-  <img id="testFish"
-       src="assets/fishing/fish_blue.png"
-       style="
-         position:absolute;
-         left:50%;
-         top:60%;
-         transform:translate(-50%,-50%);
-         width:200px;
-       ">
-</div>
 
 </body>
 </html>
