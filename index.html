@@ -381,53 +381,6 @@
     }
     .row2{ display:flex; gap:10px; margin-top:12px; }
     .row2 .sheetAction{ flex:1 1 0; justify-content:center; }
-
-    /* ===========================
-       FISHING OVERLAY (2D)
-       =========================== */
-    .fishOverlay{
-      position:fixed; inset:0;
-      z-index:9999;
-      opacity:0;
-      pointer-events:none;
-      transition: opacity .55s ease;
-    }
-    .fishOverlay.active{
-      opacity:1;
-      pointer-events:auto;
-    }
-    .fishStage{ position:absolute; inset:0; overflow:hidden; }
-    .fishBg{
-      position:absolute; inset:0;
-      background:url("assets/fishing/bg_lake.jpg") center/cover no-repeat;
-    }
-    .fishDim{
-      position:absolute; inset:0;
-      background: rgba(0,0,0,.10);
-    }
-    .fishSprite{
-      position:absolute;
-      left:58%;
-      top:62%;
-      width:min(200px, 44vw);
-      transform: translate(-50%,-50%) scale(0.2) rotate(-20deg);
-      opacity:0;
-      filter: drop-shadow(0 20px 20px rgba(0,0,0,.35));
-    }
-    .fishMult{
-      position:absolute;
-      left:58%;
-      top:62%;
-      transform: translate(-50%,-50%) scale(.6);
-      opacity:0;
-      font-size:clamp(30px, 7vw, 58px);
-      font-weight:1000;
-      color:#fff;
-      text-shadow:
-        0 4px 0 rgba(0,0,0,.6),
-        0 14px 30px rgba(0,0,0,.35);
-      -webkit-text-stroke:3px rgba(0,0,0,.4);
-    }
   </style>
 </head>
 
@@ -529,16 +482,6 @@
     </div>
   </div>
 
-  <!-- FISHING SCENE OVERLAY -->
-  <div id="fishingOverlay" class="fishOverlay">
-    <div class="fishStage">
-      <div class="fishBg"></div>
-      <div class="fishDim"></div>
-      <img id="fishSprite" class="fishSprite" src="" alt="fish">
-      <div id="fishMult" class="fishMult">x2</div>
-    </div>
-  </div>
-
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
@@ -599,66 +542,70 @@
   }
 
   /* ===========================
-     FISHING SCENE (2D)
+     FISHING OVERLAY (2D)
      =========================== */
+  const fishingOverlay = document.getElementById("fishingOverlay");
+  const fishImg = document.getElementById("testFish");
+  const fishMultEl = document.getElementById("fishMult");
+
+  const FISH_SRC = {
+    lilblues:   "assets/fishing/fish_blue.png",
+    bigoranges: "assets/fishing/fish_orange.png",
+    hugered:    "assets/fishing/fish_red.png",
+  };
+  const FISH_MULT = { lilblues:2, bigoranges:5, hugered:10 };
+
   let fishingBusy = false;
-  const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
-  function fishAsset(kind){
-    if (kind === "lilblues") return "assets/fishing/fish_blue.png";
-    if (kind === "bigoranges") return "assets/fishing/fish_orange.png";
-    if (kind === "hugered") return "assets/fishing/fish_red.png";
-    return "";
-  }
-  function fishMultiplier(kind){
-    if (kind === "lilblues") return 2;
-    if (kind === "bigoranges") return 5;
-    if (kind === "hugered") return 10;
-    return 1;
-  }
-
-  async function playFishingScene(kind){
+  function playFishingScene(kind){
     if (fishingBusy) return;
-    if (kind === "leaf") return;
+    if (!fishingOverlay || !fishImg) return;
+
+    const src = FISH_SRC[kind];
+    if (!src) return;
+
     fishingBusy = true;
 
-    const overlay = document.getElementById("fishingOverlay");
-    const fish = document.getElementById("fishSprite");
-    const mult = document.getElementById("fishMult");
+    fishImg.src = src;
 
-    fish.src = fishAsset(kind);
-    mult.textContent = "x" + fishMultiplier(kind);
+    if (fishMultEl){
+      const m = FISH_MULT[kind] || 1;
+      fishMultEl.textContent = "x" + m;
+      fishMultEl.style.opacity = "0";
+      fishMultEl.style.transform = "translate(-50%,-50%) scale(0.7)";
+    }
 
-    // reset
-    fish.style.transition = "none";
-    mult.style.transition = "none";
-    fish.style.opacity = "0";
-    mult.style.opacity = "0";
-    fish.style.transform = "translate(-50%,-50%) scale(0.2) rotate(-20deg)";
-    mult.style.transform = "translate(-50%,-50%) scale(.6)";
+    fishingOverlay.style.display = "block";
+    fishingOverlay.style.opacity = "0";
+    fishingOverlay.style.transition = "opacity 550ms ease";
+    fishImg.style.opacity = "0";
+    fishImg.style.transform = "translate(-50%,-50%) scale(0.35) rotate(-18deg)";
+    fishImg.style.transition = "transform 950ms cubic-bezier(.15,.9,.25,1), opacity 250ms ease";
 
-    overlay.classList.add("active");
-    await wait(60);
+    requestAnimationFrame(()=>{
+      fishingOverlay.style.opacity = "1";
+      setTimeout(()=>{
+        fishImg.style.opacity = "1";
+        fishImg.style.transform = "translate(-50%,-50%) scale(1.0) rotate(8deg)";
+      }, 380);
 
-    // "подсечка" — появление рыбы
-    await wait(550);
+      if (fishMultEl){
+        setTimeout(()=>{
+          fishMultEl.style.transition = "transform 520ms cubic-bezier(.2,1.25,.25,1), opacity 200ms ease";
+          fishMultEl.style.opacity = "1";
+          fishMultEl.style.transform = "translate(-50%,-50%) scale(1.05)";
+        }, 1100);
+      }
+    });
 
-    fish.style.transition = "transform 1.05s cubic-bezier(.15,.9,.25,1), opacity .25s";
-    fish.style.opacity = "1";
-    fish.style.transform = "translate(-50%,-50%) scale(1.0) rotate(8deg)";
-
-    await wait(850);
-
-    mult.style.transition = "transform .55s cubic-bezier(.2,1.25,.25,1), opacity .20s";
-    mult.style.opacity = "1";
-    mult.style.transform = "translate(-50%,-50%) scale(1.05)";
-
-    await wait(900);
-
-    overlay.classList.remove("active");
-    await wait(600);
-
-    fishingBusy = false;
+    // показать ~2.3 сек, затем скрыть
+    setTimeout(()=>{
+      fishingOverlay.style.opacity = "0";
+      setTimeout(()=>{
+        fishingOverlay.style.display = "none";
+        fishingBusy = false;
+      }, 650);
+    }, 2300);
   }
 
   /* ton core helpers */
@@ -1271,19 +1218,20 @@
     }
   }
 
-  /* ===========================
-     SERVER TIME (FIXED: NO CATCH-UP)
-     =========================== */
+  /* ---- SERVER TIME (NO WOBBLE + SANITY) ---- */
+  let timeOffset = 0;
   let syncedOnce = false;
-  let syncServerNow = Date.now();
-  let syncLocalNow = Date.now();
+  let baseServerNow = Date.now();
+  let baseLocalNow = Date.now();
   let lastServerNow = 0;
 
+  const OFFSET_SLEW = 0.22;
+
   function serverTimeNow(){
-    const est = syncServerNow + (Date.now() - syncLocalNow);
-    // монотонность (чтобы никогда не шло назад)
+    const local = Date.now();
+    let est = baseServerNow + (local - baseLocalNow) + timeOffset;
     if (syncedOnce){
-      if (est < lastServerNow) return lastServerNow;
+      if (est < lastServerNow) est = lastServerNow;
       lastServerNow = est;
     }
     return est;
@@ -1330,6 +1278,10 @@
 
   const hudMain = document.getElementById("hudMain");
 
+  // countdown anti-jitter (таймер не должен "увеличиваться" из-за ресинка)
+  let lastShownCountdown = null;
+  let lastCountdownRoundId = null;
+
   const pointerRod = document.getElementById("pointerRod");
   let lastRAFTime = 0;
   let lastRAFAngle = 0;
@@ -1361,19 +1313,22 @@
   function applyState(state){
     S = state;
 
-    // ✅ ЖЁСТКАЯ синхронизация времени: без догоняния
-    const srvNow = Number(state.serverNow || Date.now());
-    syncServerNow = srvNow;
-    syncLocalNow = Date.now();
+    // time sync
+    const targetOffset = (state.serverNow || Date.now()) - Date.now();
+
     if (!syncedOnce){
       syncedOnce = true;
-      lastServerNow = srvNow;
+      timeOffset = targetOffset;
+      baseServerNow = state.serverNow || Date.now();
+      baseLocalNow = Date.now();
+      lastServerNow = baseServerNow + timeOffset;
+    } else {
+      timeOffset = timeOffset + (targetOffset - timeOffset) * OFFSET_SLEW;
     }
 
     const srvSpin = Number(state.spinMs || SPIN_MS);
     const srvDelay = Number(state.postDelayMs || POST_DELAY_MS);
 
-    // история
     const listAll = (state.history || []).slice().sort((a,b)=>a.roundId-b.roundId);
     history.length = 0;
     for (const item of listAll.slice(-HISTORY_MAX)) history.push(item.winnerIndex);
@@ -1384,8 +1339,9 @@
 
     const sStart = Number(state.round?.startAt);
     const sEnd = Number(state.round?.endAt);
+    const sNext = Number(state.round?.nextAt);
 
-    if (!Number.isFinite(rid) || !Number.isFinite(winner) || !Number.isFinite(sStart) || !Number.isFinite(sEnd)){
+    if (!Number.isFinite(rid) || !Number.isFinite(winner) || !Number.isFinite(sStart) || !Number.isFinite(sEnd) || !Number.isFinite(sNext)) {
       return;
     }
 
@@ -1399,7 +1355,11 @@
       endAt = spinStartAt + maxSpin;
     }
 
-    nextSpinAt = endAt + maxDelay;
+    // ✅ ГЛАВНЫЙ ФИКС: nextAt с сервера (у всех одинаковый таймер)
+    nextSpinAt = sNext;
+
+    // fallback если nextAt битый (не должно быть)
+    if (!Number.isFinite(nextSpinAt) || nextSpinAt <= endAt) nextSpinAt = endAt + maxDelay;
 
     if (anchorRoundId !== rid || anchorWinner !== winner || anchorRoundId === null){
       anchorRoundId = rid;
@@ -1424,19 +1384,37 @@
 
     const now = serverTimeNow();
 
+    // новый раунд -> сброс анти-джиттера
+    if (lastCountdownRoundId !== anchorRoundId){
+      lastCountdownRoundId = anchorRoundId;
+      lastShownCountdown = null;
+    }
+
     if (now >= spinStartAt && now <= endAt){
-      hudMain.textContent = "";
+      hudMain.textContent = ""; // во время спина не показываем
+      lastShownCountdown = null;
       return;
     }
 
     if (now > endAt && now < nextSpinAt){
-      const left = Math.max(0, Math.ceil((nextSpinAt - now)/1000));
+      let left = Math.max(0, Math.ceil((nextSpinAt - now)/1000));
+
+      // запрещаем таймеру прыгать вверх (12 -> 13 -> 12)
+      if (lastShownCountdown === null) lastShownCountdown = left;
+      else left = Math.min(lastShownCountdown, left);
+
+      lastShownCountdown = left;
       hudMain.textContent = String(left);
       return;
     }
 
     if (now < spinStartAt){
-      const left = Math.max(0, Math.ceil((spinStartAt - now)/1000));
+      let left = Math.max(0, Math.ceil((spinStartAt - now)/1000));
+
+      if (lastShownCountdown === null) lastShownCountdown = left;
+      else left = Math.min(lastShownCountdown, left);
+
+      lastShownCountdown = left;
       hudMain.textContent = String(left);
       return;
     }
@@ -1457,23 +1435,20 @@
   let celebratedRoundId = null;
   let settledRoundId = null;
 
-  function winnerKindFromIndex(i){
-    if (i === 0) return "hugered";
-    if (i === 13 || i === 39) return "bigoranges";
-    if (i === 7 || i === 20 || i === 33 || i === 46) return "lilblues";
-    return "leaf";
-  }
-
   function maybeEndOfSpinActions(now){
     if (!S) return;
     if (now < endAt) return;
 
     if (celebratedRoundId !== anchorRoundId){
       celebratedRoundId = anchorRoundId;
-      const kind = winnerKindFromIndex(anchorWinner);
-      if (kind !== "leaf"){
+
+      // ✅ определяем рыб/листья по sectors[winner].kind (а не по индексам)
+      const sec = sectors[anchorWinner];
+      const kind = sec?.kind || "leaf";
+      const isLeaf = (kind === "leaf" || kind === "leaf1" || kind === "leaf2");
+
+      if (!isLeaf){
         celebrateFish(kind);
-        // ✅ сцена рыбы
         playFishingScene(kind);
       }
     }
@@ -1488,7 +1463,14 @@
   function raf(now){
     const sn = serverTimeNow();
     const trueAngle = computeTrueAngle(sn);
-    renderAngle = renderAngle + (trueAngle - renderAngle) * ANGLE_SMOOTH;
+
+    const diff = Math.abs(trueAngle - renderAngle);
+    if (diff > Math.PI * 1.5) {
+      // большой скачок (например, после обновления) — ставим сразу
+      renderAngle = trueAngle;
+    } else {
+      renderAngle = renderAngle + (trueAngle - renderAngle) * ANGLE_SMOOTH;
+    }
 
     const hi = indexAtPointer(renderAngle);
     drawWheel(renderAngle, hi);
@@ -1535,6 +1517,43 @@
     requestAnimationFrame(raf);
   })();
 </script>
+
+<!-- FISHING SCENE OVERLAY -->
+<div id="fishingOverlay" style="
+  position:fixed;
+  inset:0;
+  background:url('assets/fishing/bg_lake.jpg') center/cover no-repeat;
+  z-index:9999;
+  display:none;
+">
+  <div style="position:absolute; inset:0; background:rgba(0,0,0,0.10)"></div>
+
+  <img id="testFish"
+       src="assets/fishing/fish_blue.png"
+       style="
+         position:absolute;
+         left:58%;
+         top:62%;
+         transform:translate(-50%,-50%);
+         width:200px;
+         height:auto;
+         filter: drop-shadow(0 18px 35px rgba(0,0,0,0.55));
+       ">
+
+  <div id="fishMult" style="
+    position:absolute;
+    left:58%;
+    top:62%;
+    transform:translate(-50%,-50%);
+    font-size:56px;
+    font-weight:1000;
+    color:#fff;
+    text-shadow: 0 4px 0 rgba(0,0,0,.6), 0 14px 30px rgba(0,0,0,.35);
+    -webkit-text-stroke: 3px rgba(0,0,0,.35);
+    opacity:0;
+    pointer-events:none;
+  ">x2</div>
+</div>
 
 </body>
 </html>
