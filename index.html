@@ -1421,5 +1421,24 @@
     requestAnimationFrame(raf);
   })();
 </script>
+  <!-- FISHING SCENE OVERLAY -->
+<div id="fishingOverlay" style="
+  position:fixed;
+  inset:0;
+  background:url('assets/fishing/bg_lake.jpg') center/cover no-repeat;
+  z-index:9999;
+  display:none;
+">
+  <img id="testFish"
+       src="assets/fishing/fish_blue.png"
+       style="
+         position:absolute;
+         left:50%;
+         top:60%;
+         transform:translate(-50%,-50%);
+         width:200px;
+       ">
+</div>
+
 </body>
 </html>
