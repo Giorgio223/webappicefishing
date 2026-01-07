@@ -1,4 +1,336 @@
-<!doctype html>
+<!
+
+/* ===== BONUS FISHING SCENE (2D CANVAS) ===== */
+const bonusOverlay = document.getElementById("bonusOverlay");
+const bonusCanvas  = document.getElementById("bonusCanvas");
+const bctx = bonusCanvas.getContext("2d");
+
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function lerp(a,b,t){ return a + (b-a)*t; }
+function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
+function easeInOutCubic(t){ return t<.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+
+function kindToColor(kind){
+  if (kind === "lilblues") return COLORS.blue;
+  if (kind === "bigoranges") return COLORS.orange;
+  if (kind === "hugered") return COLORS.red;
+  return "#9ca3af";
+}
+
+/* Заглушка множителя: потом заменишь на реальный (из state.round.multiplier) */
+function pickMultiplier(kind){
+  const r = Math.random();
+  const skew = Math.pow(r, 2.2); // реже большие
+  if (kind === "lilblues")   return Math.max(1, Math.round(1 + (100-1)*(1-skew)));
+  if (kind === "bigoranges") return Math.max(1, Math.round(1 + (200-1)*(1-skew)));
+  if (kind === "hugered")    return Math.max(1, Math.round(1 + (500-1)*(1-skew)));
+  return 1;
+}
+
+/* Длительность вываживания зависит от множителя */
+function pullDurationMs(mult){
+  const t = clamp((mult - 1) / 500, 0, 1);
+  return Math.round(1600 + t * 4900); // 1.6s .. 6.5s
+}
+
+function drawGoldText(ctx, text, x, y, sizePx){
+  ctx.save();
+  ctx.font = `950 ${sizePx}px system-ui,-apple-system,Segoe UI,Roboto,Arial`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  ctx.lineWidth = Math.max(4, sizePx * 0.18);
+  ctx.strokeStyle = "rgba(0,0,0,.55)";
+  ctx.strokeText(text, x, y);
+
+  const g = ctx.createLinearGradient(x - sizePx*1.1, y - sizePx, x + sizePx*1.1, y + sizePx);
+  g.addColorStop(0, "#fff7cc");
+  g.addColorStop(0.35, "#ffd36a");
+  g.addColorStop(0.7, "#ffb300");
+  g.addColorStop(1, "#fff1b8");
+  ctx.fillStyle = g;
+  ctx.fillText(text, x, y);
+
+  ctx.globalAlpha = 0.32;
+  ctx.lineWidth = Math.max(2, sizePx * 0.10);
+  ctx.strokeStyle = "rgba(255,255,255,.9)";
+  ctx.strokeText(text, x - 2, y - 2);
+  ctx.restore();
+}
+
+function drawSceneBase(ctx, W, H, zoom, alpha){
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  ctx.translate(W/2, H/2);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-W/2, -H/2);
+
+  ctx.fillStyle = "rgba(10,20,35,.25)";
+  ctx.fillRect(0,0,W,H);
+
+  const snow = ctx.createRadialGradient(W*0.35,H*0.2, 40, W*0.5,H*0.5, W*0.75);
+  snow.addColorStop(0,"rgba(255,255,255,.22)");
+  snow.addColorStop(1,"rgba(255,255,255,0)");
+  ctx.fillStyle = snow;
+  ctx.fillRect(0,0,W,H);
+
+  const ice = ctx.createRadialGradient(W*0.5,H*0.62, 30, W*0.5,H*0.62, W*0.62);
+  ice.addColorStop(0, "rgba(255,255,255,.92)");
+  ice.addColorStop(0.55, "rgba(220,235,248,.95)");
+  ice.addColorStop(1, "rgba(170,200,225,.92)");
+  ctx.fillStyle = ice;
+  ctx.beginPath();
+  ctx.ellipse(W*0.5, H*0.66, W*0.42, H*0.18, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawHole(ctx, W, H, wobble){
+  ctx.save();
+  const x = W*0.52;
+  const y = H*0.70;
+  ctx.beginPath();
+  ctx.ellipse(x, y, W*0.09, H*0.035, 0, 0, Math.PI*2);
+  ctx.fillStyle = "rgba(5,25,60,.85)";
+  ctx.fill();
+
+  ctx.globalAlpha = 0.35 + wobble*0.15;
+  ctx.beginPath();
+  ctx.ellipse(x - W*0.02, y - H*0.01, W*0.035, H*0.012, 0, 0, Math.PI*2);
+  ctx.fillStyle = "rgba(255,255,255,.9)";
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawFisher(ctx, W, H, tug){
+  ctx.save();
+  const baseX = W*0.38;
+  const baseY = H*0.60;
+
+  ctx.fillStyle = "rgba(255,255,255,.78)";
+  ctx.strokeStyle = "rgba(0,0,0,.20)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(baseX - W*0.06, baseY + H*0.12, W*0.14, H*0.06, 14);
+  ctx.fill(); ctx.stroke();
+
+  ctx.fillStyle = "rgba(255,255,255,.92)";
+  ctx.beginPath();
+  ctx.roundRect(baseX - W*0.035, baseY + H*0.03, W*0.09, H*0.11, 18);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(255,255,255,.95)";
+  ctx.beginPath();
+  ctx.arc(baseX + W*0.01, baseY, W*0.035, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(11,42,143,.85)";
+  ctx.beginPath();
+  ctx.arc(baseX + W*0.01, baseY - H*0.01, W*0.036, Math.PI, Math.PI*2);
+  ctx.fill();
+
+  const rodX = baseX + W*0.055;
+  const rodY = baseY + H*0.02;
+  const ang = (-0.75 + tug*0.25);
+  ctx.translate(rodX, rodY);
+  ctx.rotate(ang);
+  ctx.translate(-rodX, -rodY);
+
+  ctx.strokeStyle = "rgba(225,29,72,.95)";
+  ctx.lineWidth = 8;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(rodX, rodY);
+  ctx.lineTo(rodX + W*0.22, rodY - H*0.22);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawLine(ctx, W, H, tug){
+  ctx.save();
+  const x0 = W*0.435;
+  const y0 = H*0.62;
+  const x1 = W*0.62;
+  const y1 = H*0.70;
+  const cx = lerp(x0, x1, 0.55);
+  const cy = lerp(y0, y1, 0.55) + (tug * H*0.06);
+
+  ctx.strokeStyle = "rgba(255,255,255,.85)";
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(x0,y0);
+  ctx.quadraticCurveTo(cx,cy, x1,y1);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawFish(ctx, W, H, fishColor, fishT, showX, mult){
+  ctx.save();
+  const holeX = W*0.52;
+  const holeY = H*0.70;
+
+  const y = lerp(holeY + H*0.06, holeY - H*0.20, easeOutCubic(fishT));
+  const x = holeX + Math.sin(fishT*8) * (W*0.01);
+
+  ctx.fillStyle = fishColor;
+  ctx.beginPath();
+  ctx.ellipse(x, y, W*0.07, H*0.04, -0.2, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(x - W*0.07, y);
+  ctx.lineTo(x - W*0.11, y - H*0.05);
+  ctx.lineTo(x - W*0.11, y + H*0.05);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(255,255,255,.92)";
+  ctx.beginPath();
+  ctx.arc(x + W*0.03, y - H*0.01, Math.max(2, W*0.008), 0, Math.PI*2);
+  ctx.fill();
+
+  if (showX){
+    drawGoldText(ctx, `x${mult}`, x + W*0.02, y - H*0.085, Math.round(W*0.055));
+  }
+
+  ctx.restore();
+}
+
+function drawIceCrack(ctx, W, H, crackT){
+  if (crackT <= 0) return;
+  ctx.save();
+  const x = W*0.52;
+  const y = H*0.70;
+
+  ctx.globalAlpha = clamp(crackT*1.2, 0, 1) * 0.9;
+  ctx.strokeStyle = "rgba(255,255,255,.85)";
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+
+  const rays = 6;
+  for (let i=0;i<rays;i++){
+    const a = (i/rays)*Math.PI*2 + 0.2;
+    const len = lerp(W*0.02, W*0.22, easeOutCubic(crackT));
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a)*len, y + Math.sin(a)*len*0.35);
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha *= 0.65;
+  for (let i=0;i<10;i++){
+    const a = (i/10)*Math.PI*2 + 0.1;
+    const r = lerp(W*0.05, W*0.20, crackT);
+    const px = x + Math.cos(a)*r;
+    const py = y + Math.sin(a)*r*0.28;
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(px + Math.cos(a)*W*0.02, py + Math.sin(a)*H*0.01);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+let __bonusRunning = false;
+function showFishingBonus(kind, multiplierOverride){
+  if (__bonusRunning) return;
+  __bonusRunning = true;
+
+  const fishColor = kindToColor(kind);
+  const mult = Number(multiplierOverride || pickMultiplier(kind));
+  const pullMs = pullDurationMs(mult);
+
+  bonusOverlay.classList.add("open");
+
+  const start = performance.now();
+  const introMs = 450;
+  const biteMs  = 700;
+  const smashMs = 420;
+  const outroMs = 420;
+
+  const tIntroEnd = introMs;
+  const tBiteEnd  = tIntroEnd + biteMs;
+  const tPullEnd  = tBiteEnd + pullMs;
+  const tSmashEnd = tPullEnd + smashMs;
+  const tEnd      = tSmashEnd + outroMs;
+
+  function frame(now){
+    const t = now - start;
+
+    const W = bonusCanvas.width;
+    const H = bonusCanvas.height;
+    bctx.clearRect(0,0,W,H);
+
+    let alpha = 1;
+    let zoom = 1;
+
+    if (t < introMs){
+      const k = easeOutCubic(clamp(t/introMs,0,1));
+      alpha = k;
+      zoom  = lerp(0.965, 1.0, k);
+    } else if (t > tSmashEnd){
+      const k = clamp((t - tSmashEnd)/outroMs, 0, 1);
+      alpha = 1 - easeInOutCubic(k);
+      zoom  = lerp(1.0, 0.985, easeInOutCubic(k));
+    }
+
+    let tug = 0;
+    const wig = Math.sin(t*0.018) * 0.6 + Math.sin(t*0.041) * 0.4;
+    if (t >= tIntroEnd && t < tBiteEnd){
+      const k = (t - tIntroEnd)/biteMs;
+      tug = clamp(0.25 + k*0.65 + wig*0.15, 0, 1);
+    } else if (t >= tBiteEnd && t < tPullEnd){
+      const k = (t - tBiteEnd)/pullMs;
+      tug = clamp(0.35 + (1-k)*0.35 + wig*0.12, 0, 1);
+    }
+
+    let fishT = 0.05;
+    if (t < tBiteEnd){
+      const k = clamp((t - tIntroEnd)/biteMs, 0, 1);
+      fishT = 0.05 + k*0.10;
+    } else if (t < tPullEnd){
+      const k = clamp((t - tBiteEnd)/pullMs, 0, 1);
+      fishT = 0.15 + k*0.55;
+    } else if (t < tSmashEnd){
+      const k = clamp((t - tPullEnd)/smashMs, 0, 1);
+      fishT = 0.70 + easeOutCubic(k)*0.30;
+    } else {
+      fishT = 1.0;
+    }
+
+    let crackT = 0;
+    if (t >= tPullEnd && t < tSmashEnd){
+      crackT = clamp((t - tPullEnd)/smashMs, 0, 1);
+    } else if (t >= tSmashEnd){
+      crackT = 1;
+    }
+
+    const showX = (t >= tSmashEnd);
+
+    drawSceneBase(bctx, W, H, zoom, alpha);
+    drawHole(bctx, W, H, 0.0);
+    drawIceCrack(bctx, W, H, crackT);
+    drawFisher(bctx, W, H, tug);
+    drawLine(bctx, W, H, tug);
+    drawFish(bctx, W, H, fishColor, fishT, showX, mult);
+
+    if (t < tEnd){
+      requestAnimationFrame(frame);
+    } else {
+      bonusOverlay.classList.remove("open");
+      __bonusRunning = false;
+      // TODO: здесь потом делаем начисление bet * mult (с сервера)
+      console.log("BONUS DONE:", { kind, mult, pullMs });
+    }
+  }
+
+  requestAnimationFrame(frame);
+}
+doctype html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
@@ -381,10 +713,35 @@
     }
     .row2{ display:flex; gap:10px; margin-top:12px; }
     .row2 .sheetAction{ flex:1 1 0; justify-content:center; }
-  </style>
+  
+/* ===== BONUS 2D OVERLAY ===== */
+.bonusOverlay{
+  position:fixed; inset:0;
+  display:none;
+  align-items:center; justify-content:center;
+  z-index:30;
+  background: rgba(0,0,0,.22);
+  backdrop-filter: blur(2px);
+}
+.bonusOverlay.open{ display:flex; }
+#bonusCanvas{
+  width:min(520px, 96vw);
+  height:min(520px, 96vw);
+  border-radius:22px;
+  box-shadow: 0 24px 54px rgba(0,0,0,.35);
+  background: rgba(255,255,255,.06);
+}
+
+</style>
 </head>
 
 <body>
+
+<!-- BONUS FISHING OVERLAY (2D) -->
+<div class="bonusOverlay" id="bonusOverlay" aria-hidden="true">
+  <canvas id="bonusCanvas" width="900" height="900"></canvas>
+</div>
+
   <div class="snow" id="snow"></div>
   <div class="confettiLayer" id="confetti"></div>
 
@@ -1360,7 +1717,7 @@
     if (celebratedRoundId !== anchorRoundId){
       celebratedRoundId = anchorRoundId;
       const kind = winnerKindFromIndex(anchorWinner);
-      if (kind !== "leaf") celebrateFish(kind);
+      if (kind !== "leaf") { celebrateFish(kind); showFishingBonus(kind, (S && S.round && S.round.multiplier) ? S.round.multiplier : undefined); }
     }
 
     if (settledRoundId !== anchorRoundId){
@@ -1421,5 +1778,11 @@
     requestAnimationFrame(raf);
   })();
 </script>
+
+<!-- BONUS FISHING OVERLAY (2D) -->
+<div class="bonusOverlay" id="bonusOverlay" aria-hidden="true">
+  <canvas id="bonusCanvas" width="900" height="900"></canvas>
+</div>
+
 </body>
 </html>
